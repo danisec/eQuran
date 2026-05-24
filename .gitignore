@@ -5,3 +5,5 @@
 /frontend/dist/
 /tts/.venv/
 /.omo/
+__pycache__/
+*.pyc
