@@ -1,0 +1,13 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Default permissions for eQuran desktop",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-is-fullscreen",
+    "core:window:allow-set-fullscreen",
+    "core:window:allow-set-simple-fullscreen",
+    "store:default"
+  ]
+}

@@ -1,0 +1,55 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "eQuran",
+  "version": "0.1.0",
+  "identifier": "id.equran.desktop",
+  "build": {
+    "beforeDevCommand": "npm --prefix /home/dani/equran-cli/frontend run dev -- --host 127.0.0.1",
+    "beforeBuildCommand": "npm --prefix /home/dani/equran-cli/frontend run build",
+    "devUrl": "http://127.0.0.1:5173",
+    "frontendDist": "../../frontend/build"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "eQuran",
+        "label": "main",
+        "width": 1440,
+        "height": 900,
+        "minWidth": 1024,
+        "minHeight": 768,
+        "center": true,
+        "resizable": true,
+        "fullscreen": false,
+        "decorations": true
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["deb", "rpm", "appimage"],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico",
+      "icons/icon.png"
+    ],
+    "category": "Education",
+    "shortDescription": "Desktop Al-Quran reader with audio recitation and TTS translation",
+    "longDescription": "eQuran is a desktop application for reading and listening to the Al-Quran with 6 qari options, Indonesian and English TTS translation, and offline caching.",
+    "copyright": "© 2025 eQuran",
+    "linux": {
+      "deb": {
+        "depends": ["mpv"]
+      },
+      "rpm": {
+        "depends": ["mpv"]
+      }
+    }
+  }
+}
