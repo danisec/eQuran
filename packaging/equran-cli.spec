@@ -10,7 +10,7 @@ Source0:        %{name}-%{version}.tar.gz
 BuildRequires:  cargo
 BuildRequires:  rust
 BuildRequires:  gcc
-Requires:       mpv
+BuildRequires:  alsa-lib-devel
 Requires:       espeak-ng
 Recommends:     python3
 Recommends:     python3-pip

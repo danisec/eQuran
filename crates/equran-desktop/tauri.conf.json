@@ -45,10 +45,10 @@
     "copyright": "© 2025 eQuran",
     "linux": {
       "deb": {
-        "depends": ["mpv"]
+        "depends": []
       },
       "rpm": {
-        "depends": ["mpv"]
+        "depends": []
       }
     }
   }
