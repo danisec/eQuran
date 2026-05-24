@@ -1,0 +1,6 @@
+TTS
+sacremoses>=0.0.41
+nltk>=3.7
+onnxruntime>=1.7.0
+wget
+platformdirs
