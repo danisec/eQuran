@@ -19,7 +19,7 @@ cargo build --release
 cargo build --release --features audio
 ```
 
-Feature `audio` tidak membutuhkan ALSA development headers saat compile. Playback dilakukan lewat player eksternal yang tersedia di runtime.
+Feature `audio` memakai backend native Rust (`rodio`/`cpal`) untuk MP3 dan WAV. Di Linux, build native audio membutuhkan ALSA development headers, tetapi runtime playback tidak lagi membutuhkan player eksternal seperti `mpv`.
 
 ## Contoh penggunaan
 
@@ -33,11 +33,10 @@ cargo run --features audio -- play --surah 1 --qari dossari --lang id --no-prefe
 cargo run --features audio -- play --surah 1 --qari dossari --lang id --pregenerate-tts
 ```
 
-Untuk playback sungguhan tanpa `--dry-run`, install player audio runtime dan salah satu engine TTS. Untuk bahasa Indonesia, aplikasi memakai TTS Wibowo jika sudah disiapkan, lalu fallback ke Piper, lalu `espeak-ng`.
+Untuk playback sungguhan tanpa `--dry-run`, build dengan feature `audio` dan siapkan salah satu engine TTS. Untuk bahasa Indonesia, aplikasi memakai TTS Wibowo jika sudah disiapkan, lalu fallback ke Edge-TTS (`id-ID-ArdiNeural`) jika tersedia, dan terakhir ke `espeak-ng`.
 
 ```bash
-export EQURAN_TTS_MODEL_ID=/path/to/id_ID-model.onnx
-export EQURAN_TTS_MODEL_EN=/path/to/en_US-model.onnx
+python3 -m pip install edge-tts
 cargo run --features audio -- play --surah 1 --qari misyari --lang id
 ```
 
@@ -55,7 +54,7 @@ cargo run --features audio -- play --surah 1 --qari misyari --lang id
 ## Fedora dependencies
 
 ```bash
-sudo dnf install rust cargo mpv espeak-ng python3 python3-pip
+sudo dnf install rust cargo alsa-lib-devel espeak-ng python3 python3-pip
 ```
 
 ## TTS Wibowo untuk Bahasa Indonesia
@@ -98,14 +97,14 @@ export EQURAN_TTS_WIBOWO=/path/to/tts_wibowo.py
 Urutan backend TTS Indonesia:
 
 1. TTS Wibowo jika `EQURAN_TTS_PYTHON` + `EQURAN_TTS_WIBOWO` tersedia, atau default `tts/.venv/bin/python` + `tts/tts_wibowo.py` ditemukan.
-2. Piper jika `EQURAN_TTS_MODEL_ID` diset.
+2. Edge-TTS voice `id-ID-ArdiNeural` jika command `edge-tts` tersedia.
 3. `espeak-ng` sebagai fallback terakhir.
 
 Cache TTS menyertakan nama backend agar file lama tidak tertukar:
 
 ```text
 ~/.cache/equran-cli/tts/wibowo_id_001_001.wav
-~/.cache/equran-cli/tts/piper_en_001_001.wav
+~/.cache/equran-cli/tts/edge_id_001_001.mp3
 ~/.cache/equran-cli/tts/espeak_id_001_001.wav
 ```
 
@@ -119,9 +118,9 @@ cargo run --features audio -- play --surah 2 --from-ayat 1 --to-ayat 3 --qari do
 
 Flag `--ayat` tetap tersedia untuk satu ayat saja dan tidak bisa digabung dengan range.
 
-Untuk English, gunakan Piper via `EQURAN_TTS_MODEL_EN` atau fallback `espeak-ng`.
+Untuk English, gunakan Edge-TTS voice `en-US-ChristopherNeural` atau fallback `espeak-ng`.
 
-Runtime playback mencoba player berikut secara berurutan: `mpv`, `ffplay`, `paplay`, lalu `aplay`. Rekomendasi Fedora adalah `mpv`; alternatifnya install `ffmpeg`, `pulseaudio-utils`, atau `alsa-utils`.
+Runtime playback memakai backend native Rust dan mendukung file cache MP3 qari, MP3 Edge-TTS, serta WAV dari Wibowo/`espeak-ng`. Tidak perlu menginstall `mpv`, `ffplay`, `paplay`, atau `aplay` untuk playback aplikasi.
 
 Playback audio memakai feature Rust `audio`:
 
