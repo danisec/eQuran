@@ -1,5 +1,14 @@
 <script lang="ts">
-  import { playbackState, setQari, setLang, setPrefetch, setTtsEnabled, refreshCacheStatus } from '$lib/stores/playback.svelte';
+  import {
+    installNaturalIndonesianVoice,
+    playbackState,
+    refreshCacheStatus,
+    refreshNaturalIndonesianVoiceStatus,
+    setLang,
+    setPrefetch,
+    setQari,
+    setTtsEnabled
+  } from '$lib/stores/playback.svelte';
   import { surahState } from '$lib/stores/surah.svelte';
   import CustomSelect from './CustomSelect.svelte';
   import CustomToggle from './CustomToggle.svelte';
@@ -7,11 +16,23 @@
 
   onMount(() => {
     void refreshCacheStatus(surahState.selected.nomor);
+    void refreshNaturalIndonesianVoiceStatus();
   });
 
   let cachePercent = $derived(
     playbackState.cacheTotal > 0 ? (playbackState.cacheReady / playbackState.cacheTotal) * 100 : 0
   );
+  let voiceProgressPercent = $derived(playbackState.naturalIndonesianProgress ?? 0);
+  let isNaturalIndonesianReady = $derived(playbackState.naturalIndonesianStatus === 'ready');
+  let showVoiceAction = $derived(
+    playbackState.naturalIndonesianStatus === 'missing' || playbackState.naturalIndonesianStatus === 'failed'
+  );
+  let voiceStatusIcon = $derived.by(() => {
+    if (playbackState.naturalIndonesianStatus === 'ready') return '✓';
+    if (playbackState.naturalIndonesianStatus === 'failed') return '⚠';
+    if (playbackState.naturalIndonesianStatus === 'installing') return '↧';
+    return '○';
+  });
   let showAdvanced = $state(false);
 
   const qariOptions = [
@@ -41,23 +62,65 @@
       <CustomSelect label="Language (Translation)" value={playbackState.lang} options={languageOptions} onChange={setLang} />
     </div>
 
-    <div class="mb-4">
-      <CustomToggle
-        label="TTS Translation"
-        description="Read translation after recitation"
-        checked={playbackState.ttsEnabled}
-        onChange={setTtsEnabled}
-      />
+    <div class="mb-5 rounded-2xl border border-[#d8c08a] bg-[#fffdf4]/85 p-4 shadow-sm">
+      <div class="mb-3 flex items-start gap-3">
+        <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#173f33] text-sm font-bold text-[#f8efd9]">
+          {voiceStatusIcon}
+        </div>
+        <div>
+          <h3 class="text-sm font-semibold text-[#173f33]">Translation Voice</h3>
+          <p class="mt-1 text-xs leading-relaxed text-[#5d4a2f]">{playbackState.naturalIndonesianMessage}</p>
+        </div>
+      </div>
+
+      {#if playbackState.naturalIndonesianStatus === 'checking'}
+        <p class="rounded-xl bg-[#f8efd9] px-3 py-2 text-xs font-medium text-[#5d4a2f]">Checking Natural Indonesian Voice...</p>
+      {:else if playbackState.naturalIndonesianStatus === 'installing'}
+        <div class="space-y-2">
+          <p class="text-xs font-medium text-[#5d4a2f]">Preparing Natural Indonesian Voice...</p>
+          <div class="h-2 overflow-hidden rounded-full bg-[#ead9ad]">
+            <div class="h-full rounded-full bg-[#173f33] transition-all" style={`width: ${voiceProgressPercent}%`}></div>
+          </div>
+        </div>
+      {:else if showVoiceAction}
+        <button
+          type="button"
+          class="mt-2 w-full rounded-xl bg-[#173f33] px-4 py-2.5 text-sm font-semibold text-[#f8efd9] shadow-sm transition hover:bg-[#215947] disabled:cursor-not-allowed disabled:opacity-60"
+          disabled={playbackState.naturalIndonesianInstalling || !playbackState.naturalIndonesianCanDownload}
+          onclick={() => void installNaturalIndonesianVoice()}
+        >
+          {playbackState.naturalIndonesianStatus === 'failed' ? 'Retry Download' : 'Download Natural Indonesian Voice'}
+        </button>
+      {:else if isNaturalIndonesianReady}
+        <p class="rounded-xl bg-[#e7f1df] px-3 py-2 text-xs font-medium text-[#173f33]">
+          Translation audio will be generated as you listen and saved for offline replay.
+        </p>
+      {/if}
     </div>
 
-    <div class="mb-6">
-      <CustomToggle
-        label="Prefetch Translation Audio"
-        description="Prepare the next ayah voice early"
-        checked={playbackState.prefetch}
-        onChange={setPrefetch}
-      />
-    </div>
+    {#if isNaturalIndonesianReady}
+      <div class="mb-4">
+        <CustomToggle
+          label="TTS Translation"
+          description="Read translation after recitation"
+          checked={playbackState.ttsEnabled}
+          onChange={setTtsEnabled}
+        />
+      </div>
+
+      <div class="mb-6">
+        <CustomToggle
+          label="Prefetch Translation Audio"
+          description="Prepare the next ayah voice early"
+          checked={playbackState.prefetch}
+          onChange={setPrefetch}
+        />
+      </div>
+    {:else}
+      <div class="mb-6 rounded-2xl border border-dashed border-[#c8ad73] bg-[#f8efd9]/65 p-4 text-xs leading-relaxed text-[#5d4a2f]">
+        Natural Indonesian Voice is required before TTS Translation can be enabled.
+      </div>
+    {/if}
 
     <div class="advanced-settings">
       <button
