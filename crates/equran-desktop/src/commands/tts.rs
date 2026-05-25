@@ -35,6 +35,16 @@ struct NaturalIndonesianVoiceManifest {
     name: Option<String>,
     version: String,
     platform: String,
+    url: Option<String>,
+    #[serde(default)]
+    parts: Vec<NaturalIndonesianVoiceManifestPart>,
+    sha256: Option<String>,
+    size: Option<u64>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct NaturalIndonesianVoiceManifestPart {
     url: String,
     sha256: Option<String>,
     size: Option<u64>,
@@ -255,15 +265,7 @@ async fn install_voice_pack_from_manifest(
         Some(55),
     );
 
-    let response = reqwest::get(&manifest.url)
-        .await
-        .map_err(|error| format!("Failed to download Natural Indonesian Voice: {error}"))?
-        .error_for_status()
-        .map_err(|error| format!("Natural Indonesian Voice download failed: {error}"))?;
-    let archive_bytes = response
-        .bytes()
-        .await
-        .map_err(|error| format!("Failed to read Natural Indonesian Voice download: {error}"))?;
+    let archive_bytes = download_voice_archive(manifest).await?;
 
     if let Some(expected_size) = manifest.size {
         if archive_bytes.len() as u64 != expected_size {
@@ -307,11 +309,65 @@ fn validate_voice_manifest(manifest: &NaturalIndonesianVoiceManifest) -> Result<
         ));
     }
 
-    if manifest.url.trim().is_empty() {
-        return Err("Natural Indonesian Voice manifest URL is empty.".to_owned());
+    if manifest
+        .url
+        .as_deref()
+        .is_some_and(|url| !url.trim().is_empty())
+    {
+        return Ok(());
+    }
+
+    if manifest.parts.is_empty() {
+        return Err("Natural Indonesian Voice manifest must include a URL or release asset parts.".to_owned());
+    }
+
+    if manifest.parts.iter().any(|part| part.url.trim().is_empty()) {
+        return Err("Natural Indonesian Voice manifest contains an empty part URL.".to_owned());
     }
 
     Ok(())
+}
+
+async fn download_voice_archive(manifest: &NaturalIndonesianVoiceManifest) -> Result<Vec<u8>, String> {
+    if let Some(url) = manifest.url.as_deref().filter(|url| !url.trim().is_empty()) {
+        return download_bytes(url).await;
+    }
+
+    let mut archive = Vec::new();
+    for (index, part) in manifest.parts.iter().enumerate() {
+        let part_bytes = download_bytes(&part.url).await.map_err(|error| {
+            format!("Failed to download Natural Indonesian Voice part {}: {error}", index + 1)
+        })?;
+        if let Some(expected_size) = part.size {
+            if part_bytes.len() as u64 != expected_size {
+                return Err(format!(
+                    "Natural Indonesian Voice part {} size mismatch. Expected {expected_size} bytes, got {} bytes.",
+                    index + 1,
+                    part_bytes.len()
+                ));
+            }
+        }
+        if let Some(expected_sha256) = &part.sha256 {
+            verify_sha256(&part_bytes, expected_sha256)?;
+        }
+        archive.extend_from_slice(&part_bytes);
+    }
+
+    Ok(archive)
+}
+
+async fn download_bytes(url: &str) -> Result<Vec<u8>, String> {
+    let response = reqwest::get(url)
+        .await
+        .map_err(|error| format!("Failed to download Natural Indonesian Voice: {error}"))?
+        .error_for_status()
+        .map_err(|error| format!("Natural Indonesian Voice download failed: {error}"))?;
+    let bytes = response
+        .bytes()
+        .await
+        .map_err(|error| format!("Failed to read Natural Indonesian Voice download: {error}"))?;
+
+    Ok(bytes.to_vec())
 }
 
 fn verify_sha256(bytes: &[u8], expected_sha256: &str) -> Result<(), String> {
@@ -417,7 +473,8 @@ mod tests {
             name: Some("Natural Indonesian Voice".to_owned()),
             version: "1.0.0".to_owned(),
             platform: format!("{}-{}", std::env::consts::OS, std::env::consts::ARCH),
-            url: "https://example.com/voice.tar.zst".to_owned(),
+            url: Some("https://example.com/voice.tar.zst".to_owned()),
+            parts: Vec::new(),
             sha256: None,
             size: None,
         };
@@ -431,7 +488,8 @@ mod tests {
             name: Some("Natural Indonesian Voice".to_owned()),
             version: "1.0.0".to_owned(),
             platform: "windows-x86_64".to_owned(),
-            url: "https://example.com/voice.tar.zst".to_owned(),
+            url: Some("https://example.com/voice.tar.zst".to_owned()),
+            parts: Vec::new(),
             sha256: None,
             size: None,
         };
@@ -451,5 +509,24 @@ mod tests {
             .expect_err("wrong checksum should fail");
 
         assert!(error.contains("checksum"));
+    }
+
+    #[test]
+    fn voice_manifest_accepts_release_asset_parts() {
+        let manifest = NaturalIndonesianVoiceManifest {
+            name: Some("Natural Indonesian Voice".to_owned()),
+            version: "1.0.0".to_owned(),
+            platform: format!("{}-{}", std::env::consts::OS, std::env::consts::ARCH),
+            url: None,
+            parts: vec![NaturalIndonesianVoiceManifestPart {
+                url: "https://example.com/voice.tar.zst.part-aa".to_owned(),
+                sha256: None,
+                size: None,
+            }],
+            sha256: None,
+            size: None,
+        };
+
+        assert!(validate_voice_manifest(&manifest).is_ok());
     }
 }

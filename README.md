@@ -160,6 +160,30 @@ Buat manifest JSON seperti ini dan simpan sebagai `tts/voice-pack-manifest.json`
 }
 ```
 
+Jika archive lebih besar dari limit GitHub Release asset, pecah file menjadi beberapa part di bawah 2 GiB dan gunakan manifest multipart:
+
+```json
+{
+  "name": "Natural Indonesian Voice",
+  "version": "1.0.0",
+  "platform": "linux-x86_64",
+  "parts": [
+    {
+      "url": "https://github.com/OWNER/equran-cli/releases/download/voice-v1/equran-natural-indonesian-voice-linux-x86_64-v1.tar.zst.part-aa",
+      "sha256": "PART_AA_SHA256",
+      "size": 1900000000
+    },
+    {
+      "url": "https://github.com/OWNER/equran-cli/releases/download/voice-v1/equran-natural-indonesian-voice-linux-x86_64-v1.tar.zst.part-ab",
+      "sha256": "PART_AB_SHA256",
+      "size": 1171588095
+    }
+  ],
+  "sha256": "FULL_ARCHIVE_SHA256",
+  "size": 3071588095
+}
+```
+
 Saat pengguna menekan Download, aplikasi akan mengambil manifest, mengunduh archive, memverifikasi `sha256` jika tersedia, mengekstrak archive ke app data directory, lalu mengaktifkan TTS Translation jika `tts/.venv/bin/python` dan `tts/tts_wibowo.py` sudah valid. Jika manifest tidak tersedia, aplikasi tetap bisa fallback ke `tts/setup.sh` untuk mode developer/source install.
 
 ## RPM
