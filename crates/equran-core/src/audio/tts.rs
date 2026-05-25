@@ -16,26 +16,64 @@ struct WibowoConfig {
     script: PathBuf,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum NaturalIndonesianStatus {
+    Ready,
+    MissingRuntime,
+    MissingScript,
+}
+
+impl NaturalIndonesianStatus {
+    pub fn is_ready(self) -> bool {
+        matches!(self, Self::Ready)
+    }
+}
+
 impl WibowoConfig {
-    fn from_env_or_project_root(project_root: &Path) -> Self {
+    fn from_env_or_project_roots(project_roots: &[PathBuf]) -> Self {
         let script = std::env::var_os("EQURAN_TTS_WIBOWO")
             .map(PathBuf::from)
-            .unwrap_or_else(|| project_root.join("tts/tts_wibowo.py"));
+            .unwrap_or_else(|| Self::first_project_file(project_roots, "tts/tts_wibowo.py"));
         let python = std::env::var_os("EQURAN_TTS_PYTHON")
             .map(PathBuf::from)
-            .unwrap_or_else(|| project_root.join("tts/.venv/bin/python"));
+            .unwrap_or_else(|| Self::first_project_file(project_roots, "tts/.venv/bin/python"));
         Self { python, script }
+    }
+
+    fn first_project_file(project_roots: &[PathBuf], relative_path: &str) -> PathBuf {
+        project_roots
+            .iter()
+            .map(|root| root.join(relative_path))
+            .find(|path| path.is_file())
+            .unwrap_or_else(|| {
+                project_roots
+                    .first()
+                    .map(|root| root.join(relative_path))
+                    .unwrap_or_else(|| PathBuf::from(relative_path))
+            })
     }
 
     fn is_available(&self) -> bool {
         self.python.is_file() && self.script.is_file()
+    }
+
+    fn natural_indonesian_status(&self) -> NaturalIndonesianStatus {
+        if !self.script.is_file() {
+            return NaturalIndonesianStatus::MissingScript;
+        }
+
+        if !self.python.is_file() {
+            return NaturalIndonesianStatus::MissingRuntime;
+        }
+
+        NaturalIndonesianStatus::Ready
     }
 }
 
 #[derive(Clone)]
 pub struct TtsEngine {
     cache_root: PathBuf,
-    project_root: PathBuf,
+    project_roots: Vec<PathBuf>,
 }
 
 #[cfg(test)]
@@ -44,7 +82,7 @@ mod tests {
 
     #[test]
     fn resolves_default_wibowo_paths_from_project_root() {
-        let paths = WibowoConfig::from_env_or_project_root(Path::new("/tmp/equran-cli"));
+        let paths = WibowoConfig::from_env_or_project_roots(&[PathBuf::from("/tmp/equran-cli")]);
         assert_eq!(
             paths.script,
             PathBuf::from("/tmp/equran-cli/tts/tts_wibowo.py")
@@ -53,6 +91,67 @@ mod tests {
             paths.python,
             PathBuf::from("/tmp/equran-cli/tts/.venv/bin/python")
         );
+    }
+
+    #[test]
+    fn resolves_wibowo_paths_from_first_available_project_root() {
+        let temp_dir = tempfile::tempdir().expect("temp dir should be created");
+        let missing_root = temp_dir.path().join("missing");
+        let resource_root = temp_dir.path().join("resources");
+        let tts_dir = resource_root.join("tts");
+        let venv_bin = tts_dir.join(".venv/bin");
+        std::fs::create_dir_all(&venv_bin).expect("venv bin should be created");
+        std::fs::write(tts_dir.join("tts_wibowo.py"), "").expect("script should be created");
+        std::fs::write(venv_bin.join("python"), "").expect("python should be created");
+
+        let paths = WibowoConfig::from_env_or_project_roots(&[missing_root, resource_root.clone()]);
+
+        assert_eq!(paths.script, resource_root.join("tts/tts_wibowo.py"));
+        assert_eq!(paths.python, resource_root.join("tts/.venv/bin/python"));
+    }
+
+    #[test]
+    fn reports_missing_natural_indonesian_script() {
+        let temp_dir = tempfile::tempdir().expect("temp dir should be created");
+        let root = temp_dir.path().to_path_buf();
+        std::fs::create_dir_all(root.join("tts/.venv/bin")).expect("venv bin should be created");
+        std::fs::write(root.join("tts/.venv/bin/python"), "").expect("python should be created");
+
+        let engine = TtsEngine::with_project_root(root.join("cache"), root);
+
+        assert_eq!(
+            engine.natural_indonesian_status(),
+            NaturalIndonesianStatus::MissingScript
+        );
+    }
+
+    #[test]
+    fn reports_missing_natural_indonesian_runtime() {
+        let temp_dir = tempfile::tempdir().expect("temp dir should be created");
+        let root = temp_dir.path().to_path_buf();
+        std::fs::create_dir_all(root.join("tts")).expect("tts dir should be created");
+        std::fs::write(root.join("tts/tts_wibowo.py"), "").expect("script should be created");
+
+        let engine = TtsEngine::with_project_root(root.join("cache"), root);
+
+        assert_eq!(
+            engine.natural_indonesian_status(),
+            NaturalIndonesianStatus::MissingRuntime
+        );
+    }
+
+    #[test]
+    fn reports_ready_natural_indonesian_voice() {
+        let temp_dir = tempfile::tempdir().expect("temp dir should be created");
+        let root = temp_dir.path().to_path_buf();
+        std::fs::create_dir_all(root.join("tts/.venv/bin")).expect("venv bin should be created");
+        std::fs::write(root.join("tts/tts_wibowo.py"), "").expect("script should be created");
+        std::fs::write(root.join("tts/.venv/bin/python"), "").expect("python should be created");
+
+        let engine = TtsEngine::with_project_root(root.join("cache"), root);
+
+        assert_eq!(engine.natural_indonesian_status(), NaturalIndonesianStatus::Ready);
+        assert!(engine.natural_indonesian_status().is_ready());
     }
 
     #[test]
@@ -80,14 +179,21 @@ impl TtsEngine {
         let project_root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
         Self {
             cache_root,
-            project_root,
+            project_roots: vec![project_root],
         }
     }
 
     pub fn with_project_root(cache_root: PathBuf, project_root: PathBuf) -> Self {
         Self {
             cache_root,
-            project_root,
+            project_roots: vec![project_root],
+        }
+    }
+
+    pub fn with_project_roots(cache_root: PathBuf, project_roots: Vec<PathBuf>) -> Self {
+        Self {
+            cache_root,
+            project_roots,
         }
     }
 
@@ -98,7 +204,7 @@ impl TtsEngine {
         surah: u8,
         ayah: u16,
     ) -> Result<PathBuf> {
-        let backend = self.active_backend(lang);
+        let backend = self.active_backend(lang)?;
         let tts_dir = self.cache_root.join("tts");
         fs::create_dir_all(&tts_dir)
             .await
@@ -137,7 +243,7 @@ impl TtsEngine {
         ayah: u16,
         chunk: usize,
     ) -> Result<PathBuf> {
-        let backend = self.active_backend(Lang::Id);
+        let backend = self.active_backend(Lang::Id)?;
         let tts_dir = self.cache_root.join("tts");
         fs::create_dir_all(&tts_dir)
             .await
@@ -160,19 +266,23 @@ impl TtsEngine {
         Self::split_text_for_tts(text, 700)
     }
 
-    pub fn active_backend(&self, lang: Lang) -> TtsBackend {
+    pub fn active_backend(&self, lang: Lang) -> Result<TtsBackend> {
         if lang == Lang::Id {
-            let config = WibowoConfig::from_env_or_project_root(&self.project_root);
+            let config = WibowoConfig::from_env_or_project_roots(&self.project_roots);
             if config.is_available() {
-                return TtsBackend::Wibowo;
+                return Ok(TtsBackend::Wibowo);
             }
         }
 
         if Self::is_edge_tts_available() {
-            return TtsBackend::EdgeTts;
+            return Ok(TtsBackend::EdgeTts);
         }
 
-        TtsBackend::Espeak
+        bail!("No TTS backend available. Configure TTS Wibowo or install edge-tts.")
+    }
+
+    pub fn natural_indonesian_status(&self) -> NaturalIndonesianStatus {
+        WibowoConfig::from_env_or_project_roots(&self.project_roots).natural_indonesian_status()
     }
 
     fn is_edge_tts_available() -> bool {
@@ -253,11 +363,11 @@ impl TtsEngine {
             return Ok(());
         }
 
-        self.synthesize_with_espeak(text, lang, output_path).await
+        bail!("No TTS backend available. Configure TTS Wibowo or install edge-tts.")
     }
 
     async fn synthesize_with_wibowo(&self, text: &str, output_path: &Path) -> Result<()> {
-        let config = WibowoConfig::from_env_or_project_root(&self.project_root);
+        let config = WibowoConfig::from_env_or_project_roots(&self.project_roots);
         if !config.is_available() {
             bail!("TTS Wibowo is not configured");
         }
@@ -307,34 +417,6 @@ impl TtsEngine {
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
             bail!("edge-tts failed: {stderr}");
-        }
-        Ok(())
-    }
-
-    async fn synthesize_with_espeak(
-        &self,
-        text: &str,
-        lang: Lang,
-        output_path: &Path,
-    ) -> Result<()> {
-        let voice = match lang {
-            Lang::Id => "id",
-            Lang::En => "en",
-        };
-        let output = Command::new("espeak-ng")
-            .arg("-v")
-            .arg(voice)
-            .arg("-w")
-            .arg(output_path)
-            .arg(text)
-            .stdout(Stdio::null())
-            .stderr(Stdio::piped())
-            .output()
-            .await
-            .context("failed to start espeak-ng fallback TTS. Install edge-tts or espeak-ng")?;
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            bail!("espeak-ng failed: {stderr}");
         }
         Ok(())
     }

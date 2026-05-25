@@ -100,6 +100,11 @@ impl PlaybackEngine {
         self
     }
 
+    pub fn with_project_roots(mut self, project_roots: Vec<std::path::PathBuf>) -> Self {
+        self.tts = TtsEngine::with_project_roots(self.cache.root().clone(), project_roots);
+        self
+    }
+
     pub fn with_skip_translation(self, skip: bool) -> Self {
         self.tts_enabled.store(!skip, Ordering::Relaxed);
         self
@@ -216,7 +221,7 @@ impl PlaybackEngine {
         println!(
             "Preparing {} TTS cache with {} backend...",
             lang.code(),
-            self.tts.active_backend(lang).prefix()
+            self.tts.active_backend(lang)?.prefix()
         );
         for (index, ayah) in ayat.iter().enumerate() {
             let translation = self.translation_for(ayah, english_surah, lang)?;

@@ -52,7 +52,6 @@ pub fn audio_filename(qari_key: &str, surah: u8, ayah: u16) -> String {
 pub enum TtsBackend {
     Wibowo,
     EdgeTts,
-    Espeak,
 }
 
 impl TtsBackend {
@@ -60,14 +59,13 @@ impl TtsBackend {
         match self {
             Self::Wibowo => "wibowo",
             Self::EdgeTts => "edge",
-            Self::Espeak => "espeak",
         }
     }
 
     pub fn extension(self) -> &'static str {
         match self {
             Self::EdgeTts => "mp3",
-            Self::Wibowo | Self::Espeak => "wav",
+            Self::Wibowo => "wav",
         }
     }
 }
@@ -106,8 +104,8 @@ mod tests {
             "wibowo_id_001_007.wav"
         );
         assert_eq!(
-            tts_filename(TtsBackend::Espeak, "en", 36, 12),
-            "espeak_en_036_012.wav"
+            tts_filename(TtsBackend::EdgeTts, "en", 36, 12),
+            "edge_en_036_012.wav"
         );
         assert_eq!(
             tafsir_tts_filename("id", 1, 7),
