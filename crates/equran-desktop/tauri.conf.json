@@ -42,7 +42,8 @@
     "resources": {
       "../../tts/requirements.txt": "tts/requirements.txt",
       "../../tts/setup.sh": "tts/setup.sh",
-      "../../tts/tts_wibowo.py": "tts/tts_wibowo.py"
+      "../../tts/tts_wibowo.py": "tts/tts_wibowo.py",
+      "../../tts/voice-pack-manifest.json": "tts/voice-pack-manifest.json"
     },
     "category": "Education",
     "shortDescription": "Desktop Al-Quran reader with audio recitation and TTS translation",
