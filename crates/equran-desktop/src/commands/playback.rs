@@ -4,7 +4,11 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use equran_core::{
-    audio::{cache::AudioCache, player::play_audio_cancellable, tts::TtsEngine},
+    audio::{
+        cache::AudioCache,
+        player::play_audio_cancellable,
+        tts::{NaturalIndonesianStatus, TtsEngine},
+    },
     domain::{Lang, Qari},
     playback::{AyahSelection, PlaybackEngine, PlaybackEvent},
 };
@@ -68,6 +72,10 @@ pub async fn start_playback(
     let lang: Lang = lang.parse().map_err(|e| e)?;
     let tts_enabled = tts_enabled.unwrap_or(true);
 
+    if tts_enabled && lang == Lang::Id {
+        ensure_natural_indonesian_ready(&state)?;
+    }
+
     let cancel_token = {
         let mut token = playback_state.cancel_token.lock().await;
         token.cancel();
@@ -93,12 +101,11 @@ pub async fn start_playback(
     };
 
     let cache = AudioCache::new().map_err(|e| e.to_string())?;
-    let project_root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
     let cancel_for_check = cancel_token.clone();
     let tts_flag = playback_state.tts_enabled.clone();
     tts_flag.store(tts_enabled, Ordering::Relaxed);
     let engine = PlaybackEngine::new(api, cache, false, tts_enabled, false)
-        .with_project_root(project_root)
+        .with_project_roots(state.tts_roots().to_vec())
         .with_tts_enabled_flag(tts_flag)
         .with_cancel_token(cancel_token);
 
@@ -172,9 +179,14 @@ pub struct CacheStatusPayload {
 
 #[tauri::command]
 pub async fn set_tts_enabled(
+    state: State<'_, AppState>,
     playback_state: State<'_, PlaybackState>,
     enabled: bool,
 ) -> Result<(), String> {
+    if enabled {
+        ensure_natural_indonesian_ready(&state)?;
+    }
+
     playback_state.tts_enabled.store(enabled, Ordering::Relaxed);
     Ok(())
 }
@@ -182,6 +194,7 @@ pub async fn set_tts_enabled(
 #[tauri::command]
 pub async fn play_tafsir_voice(
     playback_state: State<'_, PlaybackState>,
+    state: State<'_, AppState>,
     surah_number: u8,
     ayah_number: u16,
     text: String,
@@ -200,8 +213,7 @@ pub async fn play_tafsir_voice(
     };
 
     let cache = AudioCache::new().map_err(|e| e.to_string())?;
-    let project_root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let tts = TtsEngine::with_project_root(cache.root().clone(), project_root);
+    let tts = TtsEngine::with_project_roots(cache.root().clone(), state.tts_roots().to_vec());
     let chunks = TtsEngine::split_tafsir_text(&text);
     if chunks.is_empty() {
         return Err("Tafsir text is empty".to_owned());
@@ -273,4 +285,15 @@ fn spawn_tafsir_chunk_synthesis(
         tts.synthesize_tafsir_chunk_cached(&chunk, surah_number, ayah_number, chunk_number)
             .await
     })
+}
+
+fn ensure_natural_indonesian_ready(state: &AppState) -> Result<(), String> {
+    let cache = AudioCache::new().map_err(|e| e.to_string())?;
+    let tts = TtsEngine::with_project_roots(cache.root().clone(), state.tts_roots().to_vec());
+
+    if matches!(tts.natural_indonesian_status(), NaturalIndonesianStatus::Ready) {
+        return Ok(());
+    }
+
+    Err("Download Natural Indonesian Voice before enabling TTS Translation.".to_owned())
 }
