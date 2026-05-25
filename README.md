@@ -33,7 +33,7 @@ cargo run --features audio -- play --surah 1 --qari dossari --lang id --no-prefe
 cargo run --features audio -- play --surah 1 --qari dossari --lang id --pregenerate-tts
 ```
 
-Untuk playback sungguhan tanpa `--dry-run`, build dengan feature `audio` dan siapkan salah satu engine TTS. Untuk bahasa Indonesia, aplikasi memakai TTS Wibowo jika sudah disiapkan, lalu fallback ke Edge-TTS (`id-ID-ArdiNeural`) jika tersedia, dan terakhir ke `espeak-ng`.
+Untuk playback sungguhan tanpa `--dry-run`, build dengan feature `audio` dan siapkan salah satu engine TTS. Untuk bahasa Indonesia, aplikasi memakai Natural Indonesian Voice jika sudah disiapkan, lalu fallback ke Edge-TTS (`id-ID-ArdiNeural`) jika tersedia.
 
 ```bash
 python3 -m pip install edge-tts
@@ -54,12 +54,12 @@ cargo run --features audio -- play --surah 1 --qari misyari --lang id
 ## Fedora dependencies
 
 ```bash
-sudo dnf install rust cargo alsa-lib-devel espeak-ng python3 python3-pip
+sudo dnf install rust cargo alsa-lib-devel python3 python3-pip
 ```
 
-## TTS Wibowo untuk Bahasa Indonesia
+## Natural Indonesian Voice untuk Bahasa Indonesia
 
-Untuk suara terjemahan Indonesia yang lebih natural, siapkan backend Wibowo:
+Untuk suara terjemahan Indonesia yang lebih natural, siapkan Natural Indonesian Voice:
 
 ```bash
 cd /home/dani/equran-cli/tts
@@ -96,16 +96,15 @@ export EQURAN_TTS_WIBOWO=/path/to/tts_wibowo.py
 
 Urutan backend TTS Indonesia:
 
-1. TTS Wibowo jika `EQURAN_TTS_PYTHON` + `EQURAN_TTS_WIBOWO` tersedia, atau default `tts/.venv/bin/python` + `tts/tts_wibowo.py` ditemukan.
+1. Natural Indonesian Voice jika `EQURAN_TTS_PYTHON` + `EQURAN_TTS_WIBOWO` tersedia, atau default `tts/.venv/bin/python` + `tts/tts_wibowo.py` ditemukan.
 2. Edge-TTS voice `id-ID-ArdiNeural` jika command `edge-tts` tersedia.
-3. `espeak-ng` sebagai fallback terakhir.
+3. Jika keduanya tidak tersedia, playback terjemahan TTS akan gagal dengan pesan konfigurasi backend.
 
 Cache TTS menyertakan nama backend agar file lama tidak tertukar:
 
 ```text
 ~/.cache/equran-cli/tts/wibowo_id_001_001.wav
 ~/.cache/equran-cli/tts/edge_id_001_001.mp3
-~/.cache/equran-cli/tts/espeak_id_001_001.wav
 ```
 
 Secara default, playback langsung mulai dan TTS ayat berikutnya di-prefetch di background. Gunakan `--no-prefetch` untuk mematikan background prefetch. Jika ingin menyiapkan seluruh TTS sebelum playback, gunakan `--pregenerate-tts`.
@@ -118,9 +117,9 @@ cargo run --features audio -- play --surah 2 --from-ayat 1 --to-ayat 3 --qari do
 
 Flag `--ayat` tetap tersedia untuk satu ayat saja dan tidak bisa digabung dengan range.
 
-Untuk English, gunakan Edge-TTS voice `en-US-ChristopherNeural` atau fallback `espeak-ng`.
+Untuk English, gunakan Edge-TTS voice `en-US-ChristopherNeural`.
 
-Runtime playback memakai backend native Rust dan mendukung file cache MP3 qari, MP3 Edge-TTS, serta WAV dari Wibowo/`espeak-ng`. Tidak perlu menginstall `mpv`, `ffplay`, `paplay`, atau `aplay` untuk playback aplikasi.
+Runtime playback memakai backend native Rust dan mendukung file cache MP3 qari, MP3 Edge-TTS, serta WAV dari Natural Indonesian Voice. Tidak perlu menginstall `mpv`, `ffplay`, `paplay`, atau `aplay` untuk playback aplikasi.
 
 Playback audio memakai feature Rust `audio`:
 
@@ -128,7 +127,40 @@ Playback audio memakai feature Rust `audio`:
 cargo build --release --features audio
 ```
 
-Model Wibowo diunduh otomatis oleh wrapper saat pertama kali dipakai dan akan di-cache oleh package `g2p_id`.
+Di aplikasi desktop, TTS Translation tidak bisa diaktifkan sebelum Natural Indonesian Voice selesai disiapkan. Paket desktop utama hanya menyertakan file setup ringan; runtime dan model suara disiapkan lewat flow download agar DEB/RPM/AppImage tidak membundel seluruh `.venv`.
+
+### Voice pack desktop satu klik
+
+Untuk membuat tombol **Download Natural Indonesian Voice** bekerja tanpa setup manual, sediakan archive voice pack sebagai release asset, misalnya:
+
+```text
+equran-natural-indonesian-voice-linux-x86_64-v1.tar.zst
+```
+
+Archive tersebut harus diekstrak menjadi struktur berikut di app data directory pengguna:
+
+```text
+tts/
+  .venv/bin/python
+  .venv/bin/tts
+  tts_wibowo.py
+  requirements.txt
+```
+
+Buat manifest JSON seperti ini dan simpan sebagai `tts/voice-pack-manifest.json` di package, atau layani dari URL dan set environment variable `EQURAN_NATURAL_INDONESIAN_MANIFEST_URL`:
+
+```json
+{
+  "name": "Natural Indonesian Voice",
+  "version": "1.0.0",
+  "platform": "linux-x86_64",
+  "url": "https://github.com/OWNER/equran-cli/releases/download/voice-v1/equran-natural-indonesian-voice-linux-x86_64-v1.tar.zst",
+  "sha256": "PUT_SHA256_HERE",
+  "size": 1234567890
+}
+```
+
+Saat pengguna menekan Download, aplikasi akan mengambil manifest, mengunduh archive, memverifikasi `sha256` jika tersedia, mengekstrak archive ke app data directory, lalu mengaktifkan TTS Translation jika `tts/.venv/bin/python` dan `tts/tts_wibowo.py` sudah valid. Jika manifest tidak tersedia, aplikasi tetap bisa fallback ke `tts/setup.sh` untuk mode developer/source install.
 
 ## RPM
 
