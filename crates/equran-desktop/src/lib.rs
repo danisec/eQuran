@@ -24,7 +24,9 @@ impl AppState {
         if let Some(resource_root) = resource_root {
             tts_roots.push(resource_root);
         }
-        tts_roots.push(project_root);
+        if include_project_tts_root() {
+            tts_roots.push(project_root);
+        }
 
         Ok(Self {
             api: ApiClient::new()?,
@@ -44,6 +46,10 @@ impl AppState {
     pub fn writable_tts_root(&self) -> &PathBuf {
         &self.writable_tts_root
     }
+}
+
+fn include_project_tts_root() -> bool {
+    cfg!(debug_assertions)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -84,7 +90,7 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
-    use super::AppState;
+    use super::{include_project_tts_root, AppState};
 
     #[test]
     fn app_state_initializes_api_client() {
@@ -109,5 +115,10 @@ mod tests {
         let state = AppState::new(None, Some(writable_root.clone())).expect("AppState should initialize");
 
         assert_eq!(state.writable_tts_root(), &writable_root);
+    }
+
+    #[test]
+    fn project_tts_root_is_debug_only() {
+        assert!(include_project_tts_root());
     }
 }
