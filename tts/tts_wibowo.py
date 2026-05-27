@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+import json
 import os
 import sys
 import types
@@ -18,10 +19,11 @@ if "simpleaudio" not in sys.modules:
 
 from g2p_id.scripts.tts import (
     cache_dir,
-    config_file,
+    config_base_file,
     g2p,
     model_file,
     model_url,
+    speakers_file,
     text_normalization,
 )
 from wget import download
@@ -35,11 +37,18 @@ def synthesize(text: str, output: str) -> None:
         os.makedirs(cache_dir, exist_ok=True)
         download(model_url, out=cache_dir)
 
-    bin_dir = os.path.split(sys.executable)[0]
-    bin_tts = os.path.join(bin_dir, "tts")
+    config_file = os.path.join(cache_dir, "equran-config.json")
+    with open(config_base_file) as f:
+        config = json.load(f)
+    config["model_args"]["speakers_file"] = speakers_file
+    with open(config_file, "w") as f:
+        json.dump(config, f)
+
     result = run(
         [
-            bin_tts,
+            sys.executable,
+            "-m",
+            "TTS.bin.synthesize",
             "--text",
             phonemes,
             "--model_path",

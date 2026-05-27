@@ -4,16 +4,11 @@
   "platform": "linux-x86_64",
   "parts": [
     {
-      "url": "https://github.com/danisec/eQuran/releases/download/voice-v1/equran-natural-indonesian-voice-linux-x86_64-v1.tar.zst.part-aa",
-      "sha256": "9c3c94e13c60b48c8355535dad15652f021e5cf3167cc7325a2e06bdba1b3e36",
-      "size": 1992294400
-    },
-    {
-      "url": "https://github.com/danisec/eQuran/releases/download/voice-v1/equran-natural-indonesian-voice-linux-x86_64-v1.tar.zst.part-ab",
-      "sha256": "604212d97047168aa9aacecb93b5a968f5f54252014b73a038da803e7e1a3d31",
-      "size": 1079293695
+      "url": "https://github.com/danisec/eQuran/releases/download/voice-v1/equran-natural-indonesian-voice-linux-x86_64-v1-cpu.tar.zst.part-aa",
+      "sha256": "ca2e35335e57f6d675885a64e8eda01839cc00860ed41685497d9fe1315cd0d1",
+      "size": 613023998
     }
   ],
-  "sha256": "2da9b84712bc457a46cd4bc0063b52c35d72fbfa7072b731396c5b60024d9a1b",
-  "size": 3071588095
+  "sha256": "ca2e35335e57f6d675885a64e8eda01839cc00860ed41685497d9fe1315cd0d1",
+  "size": 613023998
 }
