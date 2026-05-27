@@ -1,197 +1,162 @@
 # EQuran CLI
 
-Rust CLI untuk memutar ayat Al-Qur'an dari EQuran.id dengan pilihan 6 qari dan voice terjemahan Indonesia atau English.
+A command-line application for listening to the Holy Quran with high-quality Arabic recitations from 6 renowned reciters and voice translations in Indonesian or English.
 
-## Fitur
+## What Can It Do?
 
-- Daftar 114 surah dari `https://equran.id/api/v2/surat`
-- Audio Arab per ayat dari 6 qari EQuran.id
-- Terjemahan Indonesia dari EQuran API v2
-- Terjemahan English dari `https://equran.id/api/en/surah/{number}`
-- Mode otomatis per surah: ayat Arab lalu voice arti, berulang sampai akhir surah
-- Cache MP3 dan WAV di `~/.cache/equran-cli/`
-- `--dry-run` untuk melihat teks tanpa audio/TTS
+- **Listen to All 114 Surahs** with high-quality Arabic recitations
+- **Choose Your Favorite Reciter** from 6 renowned reciters
+- **Voice Translations** in Indonesian or English
+- **Play by Verse or Verse Range** as needed
+- **Automatic Mode** - Arabic recitation followed by translation, repeating until the end of the surah
+- **Offline-Ready** - Audio is automatically cached for offline playback
 
-## Build
+## Available Reciters
+
+Choose from one of 6 reciters:
+
+| Reciter Name | Code |
+|--------------|------|
+| Abdullah Al-Juhany | `juhany` |
+| Abdul Muhsin Al-Qasim | `qasim` |
+| Abdurrahman As-Sudais | `sudais` |
+| Ibrahim Al-Dossari | `dossari` |
+| Misyari Rasyid Al-Afasy | `misyari` |
+| Yasser Al-Dosari | `yasser` |
+
+## How to Use
+
+### List All Surahs
 
 ```bash
-cargo build --release
+equran-cli list
+```
+
+### View Surah Information
+
+```bash
+equran-cli info --surah 1
+```
+
+### Play Complete Surah
+
+Play Surah Al-Fatihah with reciter Misyari and Indonesian translation:
+
+```bash
+equran-cli play --surah 1 --qari misyari --lang id
+```
+
+Play with English translation:
+
+```bash
+equran-cli play --surah 1 --qari sudais --lang en
+```
+
+### Play Single Verse
+
+Play the first verse of Surah Al-Fatihah:
+
+```bash
+equran-cli play --surah 1 --ayat 1 --qari dossari --lang id
+```
+
+### Play Verse Range
+
+Play Surah Al-Baqarah verses 1 to 5:
+
+```bash
+equran-cli play --surah 2 --from-ayat 1 --to-ayat 5 --qari misyari --lang id
+```
+
+### View Text Without Audio
+
+Use `--dry-run` to view Arabic text and translation without playing audio:
+
+```bash
+equran-cli play --surah 1 --qari misyari --lang id --dry-run
+```
+
+## Installation
+
+### Linux (Fedora/RHEL)
+
+```bash
+sudo dnf install equran-cli
+```
+
+### From Source
+
+Requires Rust toolchain:
+
+```bash
+git clone https://github.com/OWNER/equran-cli
+cd equran-cli
 cargo build --release --features audio
+sudo cp target/release/equran-cli /usr/local/bin/
 ```
 
-Feature `audio` memakai backend native Rust (`rodio`/`cpal`) untuk MP3 dan WAV. Di Linux, build native audio membutuhkan ALSA development headers, tetapi runtime playback tidak lagi membutuhkan player eksternal seperti `mpv`.
+## Translation Voice Quality
 
-## Contoh penggunaan
+### Indonesian
 
-```bash
-cargo run -- list
-cargo run -- info --surah 1
-cargo run -- play --surah 1 --qari misyari --lang id --dry-run
-cargo run -- play --surah 1 --ayat 1 --qari sudais --lang en --dry-run
-cargo run -- play --surah 2 --from-ayat 1 --to-ayat 3 --qari dossari --lang id --dry-run
-cargo run --features audio -- play --surah 1 --qari dossari --lang id --no-prefetch
-cargo run --features audio -- play --surah 1 --qari dossari --lang id --pregenerate-tts
-```
+The application supports two voice engines:
 
-Untuk playback sungguhan tanpa `--dry-run`, build dengan feature `audio` dan siapkan salah satu engine TTS. Untuk bahasa Indonesia, aplikasi memakai Natural Indonesian Voice jika sudah disiapkan, lalu fallback ke Edge-TTS (`id-ID-ArdiNeural`) jika tersedia.
+1. **Natural Indonesian Voice** (Recommended) - High-quality natural voice
+2. **Edge-TTS** - Standard voice from Microsoft Edge
+
+To use Natural Indonesian Voice, run setup once:
 
 ```bash
-python3 -m pip install edge-tts
-cargo run --features audio -- play --surah 1 --qari misyari --lang id
-```
-
-## Qari
-
-| Shortname | Qari | Key |
-| --- | --- | --- |
-| juhany | Abdullah Al-Juhany | 01 |
-| qasim | Abdul Muhsin Al-Qasim | 02 |
-| sudais | Abdurrahman As-Sudais | 03 |
-| dossari | Ibrahim Al-Dossari | 04 |
-| misyari | Misyari Rasyid Al-Afasy | 05 |
-| yasser | Yasser Al-Dosari | 06 |
-
-## Fedora dependencies
-
-```bash
-sudo dnf install rust cargo alsa-lib-devel python3 python3-pip
-```
-
-## Natural Indonesian Voice untuk Bahasa Indonesia
-
-Untuk suara terjemahan Indonesia yang lebih natural, siapkan Natural Indonesian Voice:
-
-```bash
-cd /home/dani/equran-cli/tts
+cd tts
 bash setup.sh
 ```
 
-Jika package Coqui TTS belum mendukung Python bawaan sistem, gunakan Python 3.10/3.11:
+If not set up, the application automatically uses Edge-TTS.
+
+### English
+
+Uses Edge-TTS voice `en-US-ChristopherNeural`.
+
+## Advanced Options
+
+### Prepare Audio Before Playback
+
+By default, audio plays immediately and the next verse is prepared in the background. To prepare all audio before starting:
 
 ```bash
-cd /home/dani/equran-cli/tts
-PYTHON_BIN=python3.11 bash setup.sh
+equran-cli play --surah 1 --qari dossari --lang id --pregenerate-tts
 ```
 
-Setelah setup, jalankan dari root project:
+### Disable Background Prefetch
 
 ```bash
-cd /home/dani/equran-cli
-cargo run --features audio -- play --surah 1 --qari dossari --lang id
+equran-cli play --surah 1 --qari dossari --lang id --no-prefetch
 ```
 
-Aplikasi otomatis mencari:
+## Cache Location
 
-```text
-tts/.venv/bin/python
-tts/tts_wibowo.py
+Downloaded audio is stored at:
+
+```
+~/.cache/equran-cli/
 ```
 
-Jika lokasi berbeda, override dengan:
+Cached files enable offline playback without re-downloading.
+
+## Help
+
+To view all available options:
 
 ```bash
-export EQURAN_TTS_PYTHON=/path/to/python
-export EQURAN_TTS_WIBOWO=/path/to/tts_wibowo.py
+equran-cli --help
+equran-cli play --help
 ```
 
-Urutan backend TTS Indonesia:
+## Data Sources
 
-1. Natural Indonesian Voice jika `EQURAN_TTS_PYTHON` + `EQURAN_TTS_WIBOWO` tersedia, atau default `tts/.venv/bin/python` + `tts/tts_wibowo.py` ditemukan.
-2. Edge-TTS voice `id-ID-ArdiNeural` jika command `edge-tts` tersedia.
-3. Jika keduanya tidak tersedia, playback terjemahan TTS akan gagal dengan pesan konfigurasi backend.
+- Arabic Audio: [EQuran.id](https://equran.id)
+- Translations: EQuran API v2
 
-Cache TTS menyertakan nama backend agar file lama tidak tertukar:
+---
 
-```text
-~/.cache/equran-cli/tts/wibowo_id_001_001.wav
-~/.cache/equran-cli/tts/edge_id_001_001.mp3
-```
-
-Secara default, playback langsung mulai dan TTS ayat berikutnya di-prefetch di background. Gunakan `--no-prefetch` untuk mematikan background prefetch. Jika ingin menyiapkan seluruh TTS sebelum playback, gunakan `--pregenerate-tts`.
-
-Untuk memutar sebagian surah, gunakan `--from-ayat` dan `--to-ayat`. Contoh Surah Al-Baqarah ayat 1 sampai 3:
-
-```bash
-cargo run --features audio -- play --surah 2 --from-ayat 1 --to-ayat 3 --qari dossari --lang id
-```
-
-Flag `--ayat` tetap tersedia untuk satu ayat saja dan tidak bisa digabung dengan range.
-
-Untuk English, gunakan Edge-TTS voice `en-US-ChristopherNeural`.
-
-Runtime playback memakai backend native Rust dan mendukung file cache MP3 qari, MP3 Edge-TTS, serta WAV dari Natural Indonesian Voice. Tidak perlu menginstall `mpv`, `ffplay`, `paplay`, atau `aplay` untuk playback aplikasi.
-
-Playback audio memakai feature Rust `audio`:
-
-```bash
-cargo build --release --features audio
-```
-
-Di aplikasi desktop, TTS Translation tidak bisa diaktifkan sebelum Natural Indonesian Voice selesai disiapkan. Paket desktop utama hanya menyertakan file setup ringan; runtime dan model suara disiapkan lewat flow download agar DEB/RPM/AppImage tidak membundel seluruh `.venv`.
-
-### Voice pack desktop satu klik
-
-Untuk membuat tombol **Download Natural Indonesian Voice** bekerja tanpa setup manual, sediakan archive voice pack sebagai release asset, misalnya:
-
-```text
-equran-natural-indonesian-voice-linux-x86_64-v1.tar.zst
-```
-
-Archive tersebut harus diekstrak menjadi struktur berikut di app data directory pengguna:
-
-```text
-tts/
-  .venv/bin/python
-  .venv/bin/tts
-  tts_wibowo.py
-  requirements.txt
-```
-
-Buat manifest JSON seperti ini dan simpan sebagai `tts/voice-pack-manifest.json` di package, atau layani dari URL dan set environment variable `EQURAN_NATURAL_INDONESIAN_MANIFEST_URL`:
-
-```json
-{
-  "name": "Natural Indonesian Voice",
-  "version": "1.0.0",
-  "platform": "linux-x86_64",
-  "url": "https://github.com/OWNER/equran-cli/releases/download/voice-v1/equran-natural-indonesian-voice-linux-x86_64-v1.tar.zst",
-  "sha256": "PUT_SHA256_HERE",
-  "size": 1234567890
-}
-```
-
-Jika archive lebih besar dari limit GitHub Release asset, pecah file menjadi beberapa part di bawah 2 GiB dan gunakan manifest multipart:
-
-```json
-{
-  "name": "Natural Indonesian Voice",
-  "version": "1.0.0",
-  "platform": "linux-x86_64",
-  "parts": [
-    {
-      "url": "https://github.com/OWNER/equran-cli/releases/download/voice-v1/equran-natural-indonesian-voice-linux-x86_64-v1.tar.zst.part-aa",
-      "sha256": "PART_AA_SHA256",
-      "size": 1900000000
-    },
-    {
-      "url": "https://github.com/OWNER/equran-cli/releases/download/voice-v1/equran-natural-indonesian-voice-linux-x86_64-v1.tar.zst.part-ab",
-      "sha256": "PART_AB_SHA256",
-      "size": 1171588095
-    }
-  ],
-  "sha256": "FULL_ARCHIVE_SHA256",
-  "size": 3071588095
-}
-```
-
-Saat pengguna menekan Download, aplikasi akan mengambil manifest, mengunduh archive, memverifikasi `sha256` jika tersedia, mengekstrak archive ke app data directory, lalu mengaktifkan TTS Translation jika `tts/.venv/bin/python` dan `tts/tts_wibowo.py` sudah valid. Jika manifest tidak tersedia, aplikasi tetap bisa fallback ke `tts/setup.sh` untuk mode developer/source install.
-
-## RPM
-
-Spec file awal tersedia di `packaging/equran-cli.spec`.
-
-Build manual dari source release tarball:
-
-```bash
-rpmbuild -ba packaging/equran-cli.spec
-```
+**Technical Note for Developers**: Build documentation, dependencies, and advanced configuration are available in [DEVELOPER.md](DEVELOPER.md)
