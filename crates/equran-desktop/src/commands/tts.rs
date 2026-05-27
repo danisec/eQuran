@@ -1,4 +1,7 @@
-use std::{path::{Path, PathBuf}, process::Stdio};
+use std::{
+    path::{Path, PathBuf},
+    process::Stdio,
+};
 
 use equran_core::audio::{
     cache::AudioCache,
@@ -32,7 +35,6 @@ pub struct NaturalIndonesianInstallProgressPayload {
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct NaturalIndonesianVoiceManifest {
-    name: Option<String>,
     version: String,
     platform: String,
     url: Option<String>,
@@ -196,7 +198,7 @@ fn payload_from_status(status: NaturalIndonesianStatus) -> NaturalIndonesianVoic
             status: "missingRuntime".to_owned(),
             ready: false,
             can_download: true,
-            message: "Natural Indonesian Voice needs to download and prepare its voice runtime before TTS Translation can be enabled.".to_owned(),
+            message: "Download and prepare its voice runtime before TTS Translation can be enabled.".to_owned(),
         },
         NaturalIndonesianStatus::MissingScript => NaturalIndonesianVoiceStatusPayload {
             status: "missingScript".to_owned(),
@@ -257,15 +259,11 @@ async fn install_voice_pack_from_manifest(
     emit_install_progress(
         window,
         "downloadingModel",
-        &format!(
-            "Downloading {} {}.",
-            manifest.name.as_deref().unwrap_or("Natural Indonesian Voice"),
-            manifest.version
-        ),
-        Some(55),
+        &format!("Downloading Voice {}", manifest.version),
+        Some(40),
     );
 
-    let archive_bytes = download_voice_archive(manifest).await?;
+    let archive_bytes = download_voice_archive(window, manifest).await?;
 
     if let Some(expected_size) = manifest.size {
         if archive_bytes.len() as u64 != expected_size {
@@ -328,14 +326,39 @@ fn validate_voice_manifest(manifest: &NaturalIndonesianVoiceManifest) -> Result<
     Ok(())
 }
 
-async fn download_voice_archive(manifest: &NaturalIndonesianVoiceManifest) -> Result<Vec<u8>, String> {
+async fn download_voice_archive(
+    window: &Window,
+    manifest: &NaturalIndonesianVoiceManifest,
+) -> Result<Vec<u8>, String> {
     if let Some(url) = manifest.url.as_deref().filter(|url| !url.trim().is_empty()) {
-        return download_bytes(url).await;
+        let mut downloaded = 0;
+        return download_bytes_with_progress(
+            url,
+            manifest.size,
+            &mut downloaded,
+            manifest.size,
+            window,
+            &manifest.version,
+        )
+        .await;
     }
 
     let mut archive = Vec::new();
+    let total_size = manifest
+        .size
+        .or_else(|| manifest.parts.iter().map(|part| part.size).sum());
+    let mut downloaded_total = 0;
     for (index, part) in manifest.parts.iter().enumerate() {
-        let part_bytes = download_bytes(&part.url).await.map_err(|error| {
+        let part_bytes = download_bytes_with_progress(
+            &part.url,
+            part.size,
+            &mut downloaded_total,
+            total_size,
+            window,
+            &manifest.version,
+        )
+        .await
+        .map_err(|error| {
             format!("Failed to download Natural Indonesian Voice part {}: {error}", index + 1)
         })?;
         if let Some(expected_size) = part.size {
@@ -356,18 +379,42 @@ async fn download_voice_archive(manifest: &NaturalIndonesianVoiceManifest) -> Re
     Ok(archive)
 }
 
-async fn download_bytes(url: &str) -> Result<Vec<u8>, String> {
+async fn download_bytes_with_progress(
+    url: &str,
+    expected_size: Option<u64>,
+    downloaded_total: &mut u64,
+    total_size: Option<u64>,
+    window: &Window,
+    version: &str,
+) -> Result<Vec<u8>, String> {
     let response = reqwest::get(url)
         .await
         .map_err(|error| format!("Failed to download Natural Indonesian Voice: {error}"))?
         .error_for_status()
         .map_err(|error| format!("Natural Indonesian Voice download failed: {error}"))?;
-    let bytes = response
-        .bytes()
-        .await
-        .map_err(|error| format!("Failed to read Natural Indonesian Voice download: {error}"))?;
+    let mut response = response;
+    let mut bytes = Vec::with_capacity(expected_size.unwrap_or_default() as usize);
 
-    Ok(bytes.to_vec())
+    while let Some(chunk) = response
+        .chunk()
+        .await
+        .map_err(|error| format!("Failed to read Natural Indonesian Voice download: {error}"))?
+    {
+        *downloaded_total += chunk.len() as u64;
+        bytes.extend_from_slice(&chunk);
+        if let Some(total_size) = total_size.filter(|size| *size > 0) {
+            let raw_percent = ((*downloaded_total as f64 / total_size as f64) * 100.0).round() as u8;
+            let percent = raw_percent.min(99);
+            emit_install_progress(
+                window,
+                "downloadingModel",
+                &format!("Downloading Voice {version}"),
+                Some(percent),
+            );
+        }
+    }
+
+    Ok(bytes)
 }
 
 fn verify_sha256(bytes: &[u8], expected_sha256: &str) -> Result<(), String> {
@@ -470,7 +517,6 @@ mod tests {
     #[test]
     fn voice_manifest_accepts_current_platform() {
         let manifest = NaturalIndonesianVoiceManifest {
-            name: Some("Natural Indonesian Voice".to_owned()),
             version: "1.0.0".to_owned(),
             platform: format!("{}-{}", std::env::consts::OS, std::env::consts::ARCH),
             url: Some("https://example.com/voice.tar.zst".to_owned()),
@@ -485,7 +531,6 @@ mod tests {
     #[test]
     fn voice_manifest_rejects_wrong_platform() {
         let manifest = NaturalIndonesianVoiceManifest {
-            name: Some("Natural Indonesian Voice".to_owned()),
             version: "1.0.0".to_owned(),
             platform: "windows-x86_64".to_owned(),
             url: Some("https://example.com/voice.tar.zst".to_owned()),
@@ -514,7 +559,6 @@ mod tests {
     #[test]
     fn voice_manifest_accepts_release_asset_parts() {
         let manifest = NaturalIndonesianVoiceManifest {
-            name: Some("Natural Indonesian Voice".to_owned()),
             version: "1.0.0".to_owned(),
             platform: format!("{}-{}", std::env::consts::OS, std::env::consts::ARCH),
             url: None,
