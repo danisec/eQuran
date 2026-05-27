@@ -536,6 +536,50 @@ div {
   color: #07130f;
 }
 
+.translation-voice-card {
+  color: #173f33;
+}
+
+.translation-voice-title {
+  color: #173f33;
+}
+
+.translation-voice-copy {
+  color: #5d4a2f;
+}
+
+.translation-voice-note {
+  background: rgba(248, 239, 217, 0.86);
+  color: #5d4a2f;
+}
+
+.translation-voice-track {
+  background: #ead9ad;
+}
+
+.dark .translation-voice-card {
+  border-color: oklch(70% 0.09 88 / 0.34) !important;
+  background: linear-gradient(180deg, oklch(24% 0.032 164 / 0.94), oklch(17% 0.026 164 / 0.94)) !important;
+  box-shadow: inset 0 1px 0 oklch(86% 0.08 88 / 0.08), 0 16px 34px rgba(0, 0, 0, 0.28);
+}
+
+.dark .translation-voice-title {
+  color: oklch(88% 0.06 88) !important;
+}
+
+.dark .translation-voice-copy {
+  color: oklch(82% 0.035 88 / 0.78) !important;
+}
+
+.dark .translation-voice-note {
+  background: oklch(28% 0.035 164 / 0.78) !important;
+  color: oklch(84% 0.045 88 / 0.84) !important;
+}
+
+.dark .translation-voice-track {
+  background: oklch(72% 0.07 88 / 0.22) !important;
+}
+
 .advanced-settings {
   border-top: 1px solid rgba(202, 176, 120, 0.42);
   padding-top: 1rem;
