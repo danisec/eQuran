@@ -78,21 +78,63 @@ equran-cli play --surah 1 --qari misyari --lang id --dry-run
 
 ## Installation
 
-### Linux (Fedora/RHEL)
+### Desktop Application (with GUI)
+
+The eQuran desktop application includes a graphical interface and comes with **Natural Indonesian Voice TTS** pre-configured for high-quality translation audio.
+
+#### RPM-based Linux (Fedora, RHEL, CentOS, etc.)
+
+Download and install the RPM package:
 
 ```bash
-sudo dnf install equran-cli
+# Download from GitHub Releases
+wget https://github.com/danisec/eQuran/releases/download/voice-v1/eQuran-1.0.0-1.x86_64.rpm
+
+# Install using dnf (Fedora/RHEL 8+)
+sudo dnf install ./eQuran-1.0.0-1.x86_64.rpm
+
+# Or using rpm
+sudo rpm -ivh eQuran-1.0.0-1.x86_64.rpm
 ```
 
-### From Source
+Launch from your application menu or run `equran-desktop` in terminal.
 
-Requires Rust toolchain:
+#### DEB-based Linux (Debian, Ubuntu, Linux Mint, etc.)
+
+Download and install the DEB package:
 
 ```bash
-git clone https://github.com/OWNER/equran-cli
+# Download from GitHub Releases
+wget https://github.com/danisec/eQuran/releases/download/voice-v1/eQuran_1.0.0_amd64.deb
+
+# Install using apt
+sudo apt install ./eQuran_1.0.0_amd64.deb
+
+# Or using dpkg
+sudo dpkg -i eQuran_1.0.0_amd64.deb
+
+# If there are dependency issues, run:
+sudo apt-get install -f
+```
+
+Launch from your application menu or run `equran-desktop` in terminal.
+
+### CLI Version (from source)
+
+For command-line only usage, build from source:
+
+```bash
+git clone https://github.com/danisec/eQuran.git
 cd equran-cli
 cargo build --release --features audio
 sudo cp target/release/equran-cli /usr/local/bin/
+```
+
+For Natural Indonesian Voice TTS support with CLI version, run setup:
+
+```bash
+cd tts
+bash setup.sh
 ```
 
 ## Translation Voice Quality
@@ -154,9 +196,7 @@ equran-cli play --help
 
 ## Data Sources
 
-- Arabic Audio: [EQuran.id](https://equran.id)
-- Translations: EQuran API v2
+- Arabic Audio, Tafsir: [EQuran.id](https://equran.id)
+- TTS Indonesia: [TTS Indonesia Gratis](https://github.com/drat/TTS-Indonesia-Gratis)
 
 ---
-
-**Technical Note for Developers**: Build documentation, dependencies, and advanced configuration are available in [DEVELOPER.md](DEVELOPER.md)
