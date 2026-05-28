@@ -1,10 +1,18 @@
 use std::{
     path::{Path, PathBuf},
     process::Stdio,
+    sync::Arc,
 };
 
 use anyhow::{Context, Result, bail};
-use tokio::{fs, process::Command};
+use serde::{Deserialize, Serialize};
+use tokio::{
+    fs,
+    io::{AsyncBufReadExt, AsyncWriteExt, BufReader, Lines},
+    process::{Child, ChildStdin, ChildStdout, Command},
+    sync::Mutex,
+    time::{Duration, timeout},
+};
 
 use crate::{
     audio::cache::{TtsBackend, tafsir_tts_chunk_filename, tafsir_tts_filename, tts_filename},
@@ -15,6 +23,31 @@ struct WibowoConfig {
     python: PathBuf,
     script: PathBuf,
 }
+
+struct WibowoService {
+    config: WibowoConfig,
+    process: Mutex<Option<WibowoServiceProcess>>,
+}
+
+struct WibowoServiceProcess {
+    child: Child,
+    stdin: ChildStdin,
+    stdout: Lines<BufReader<ChildStdout>>,
+}
+
+#[derive(Debug, Serialize)]
+struct WibowoServiceRequest<'a> {
+    text: &'a str,
+    output: &'a str,
+}
+
+#[derive(Debug, Deserialize)]
+struct WibowoServiceResponse {
+    ok: bool,
+    error: Option<String>,
+}
+
+const WIBOWO_SERVICE_REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum NaturalIndonesianStatus {
@@ -74,6 +107,7 @@ impl WibowoConfig {
 pub struct TtsEngine {
     cache_root: PathBuf,
     project_roots: Vec<PathBuf>,
+    wibowo_service: Arc<Mutex<Option<Arc<WibowoService>>>>,
 }
 
 #[cfg(test)]
@@ -150,7 +184,10 @@ mod tests {
 
         let engine = TtsEngine::with_project_root(root.join("cache"), root);
 
-        assert_eq!(engine.natural_indonesian_status(), NaturalIndonesianStatus::Ready);
+        assert_eq!(
+            engine.natural_indonesian_status(),
+            NaturalIndonesianStatus::Ready
+        );
         assert!(engine.natural_indonesian_status().is_ready());
     }
 
@@ -172,6 +209,108 @@ mod tests {
         assert!(chunks.len() > 1);
         assert!(chunks.iter().all(|chunk| !chunk.trim().is_empty()));
     }
+
+    #[tokio::test]
+    async fn uses_persistent_wibowo_service_protocol_when_enabled() {
+        let temp_dir = tempfile::tempdir().expect("temp dir should be created");
+        let root = temp_dir.path().to_path_buf();
+        let tts_dir = root.join("tts");
+        let venv_bin = tts_dir.join(".venv/bin");
+        std::fs::create_dir_all(&venv_bin).expect("venv bin should be created");
+        std::os::unix::fs::symlink("/usr/bin/python3", venv_bin.join("python"))
+            .expect("python symlink should be created");
+        let service_log = root.join("service.log");
+        let script = tts_dir.join("tts_wibowo.py");
+        std::fs::write(
+            &script,
+            format!(
+                r#"#!/usr/bin/env python3
+import argparse, json, pathlib, sys
+parser = argparse.ArgumentParser()
+parser.add_argument('--service', action='store_true')
+args = parser.parse_args()
+if not args.service:
+    sys.exit(17)
+pathlib.Path({log:?}).write_text('started')
+for line in sys.stdin:
+    request = json.loads(line)
+    pathlib.Path(request['output']).write_text(request['text'])
+    print(json.dumps({{'ok': True}}), flush=True)
+"#,
+                log = service_log.to_string_lossy()
+            ),
+        )
+        .expect("script should be created");
+
+        let engine = TtsEngine::with_project_roots(root.join("cache"), vec![root.clone()]);
+        let output = root.join("out.wav");
+
+        engine
+            .synthesize_with_wibowo_service("halo", &output)
+            .await
+            .expect("service synthesis should succeed");
+
+        assert_eq!(std::fs::read_to_string(&output).expect("output"), "halo");
+        assert_eq!(
+            std::fs::read_to_string(&service_log).expect("log"),
+            "started"
+        );
+    }
+
+    #[tokio::test]
+    async fn wibowo_service_error_does_not_poison_next_request() {
+        let temp_dir = tempfile::tempdir().expect("temp dir should be created");
+        let root = temp_dir.path().to_path_buf();
+        let tts_dir = root.join("tts");
+        let venv_bin = tts_dir.join(".venv/bin");
+        std::fs::create_dir_all(&venv_bin).expect("venv bin should be created");
+        std::os::unix::fs::symlink("/usr/bin/python3", venv_bin.join("python"))
+            .expect("python symlink should be created");
+        let marker = root.join("marker");
+        let script = tts_dir.join("tts_wibowo.py");
+        std::fs::write(
+            &script,
+            format!(
+                r#"#!/usr/bin/env python3
+import argparse, json, pathlib, sys
+parser = argparse.ArgumentParser()
+parser.add_argument('--service', action='store_true')
+args = parser.parse_args()
+marker = pathlib.Path({marker:?})
+if not marker.exists():
+    marker.write_text('failed-once')
+    print(json.dumps({{'ok': False, 'error': 'temporary failure'}}), flush=True)
+    sys.exit(0)
+for line in sys.stdin:
+    request = json.loads(line)
+    pathlib.Path(request['output']).write_text(request['text'])
+    print(json.dumps({{'ok': True}}), flush=True)
+"#,
+                marker = marker.to_string_lossy()
+            ),
+        )
+        .expect("script should be created");
+
+        let engine = TtsEngine::with_project_roots(root.join("cache"), vec![root.clone()]);
+        let first_output = root.join("first.wav");
+        let second_output = root.join("second.wav");
+
+        assert!(
+            engine
+                .synthesize_with_wibowo_service("first", &first_output)
+                .await
+                .is_err()
+        );
+        engine
+            .synthesize_with_wibowo_service("second", &second_output)
+            .await
+            .expect("service should restart after failure");
+
+        assert_eq!(
+            std::fs::read_to_string(&second_output).expect("second output"),
+            "second"
+        );
+    }
 }
 
 impl TtsEngine {
@@ -180,6 +319,7 @@ impl TtsEngine {
         Self {
             cache_root,
             project_roots: vec![project_root],
+            wibowo_service: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -187,6 +327,7 @@ impl TtsEngine {
         Self {
             cache_root,
             project_roots: vec![project_root],
+            wibowo_service: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -194,6 +335,7 @@ impl TtsEngine {
         Self {
             cache_root,
             project_roots,
+            wibowo_service: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -351,8 +493,18 @@ impl TtsEngine {
     }
 
     async fn synthesize(&self, text: &str, lang: Lang, output_path: &Path) -> Result<()> {
-        if lang == Lang::Id && self.synthesize_with_wibowo(text, output_path).await.is_ok() {
-            return Ok(());
+        if lang == Lang::Id {
+            if self
+                .synthesize_with_wibowo_service(text, output_path)
+                .await
+                .is_ok()
+            {
+                return Ok(());
+            }
+
+            if self.synthesize_with_wibowo(text, output_path).await.is_ok() {
+                return Ok(());
+            }
         }
 
         if self
@@ -392,6 +544,16 @@ impl TtsEngine {
         Ok(())
     }
 
+    async fn synthesize_with_wibowo_service(&self, text: &str, output_path: &Path) -> Result<()> {
+        let service = self.wibowo_service().await?;
+        timeout(
+            WIBOWO_SERVICE_REQUEST_TIMEOUT,
+            service.synthesize(text, output_path),
+        )
+        .await
+        .context("TTS Wibowo service request timed out")?
+    }
+
     async fn synthesize_with_edge_tts(
         &self,
         text: &str,
@@ -417,6 +579,119 @@ impl TtsEngine {
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
             bail!("edge-tts failed: {stderr}");
+        }
+        Ok(())
+    }
+
+    async fn wibowo_service(&self) -> Result<Arc<WibowoService>> {
+        let mut service = self.wibowo_service.lock().await;
+        if let Some(service) = service.as_ref() {
+            return Ok(service.clone());
+        }
+
+        let config = WibowoConfig::from_env_or_project_roots(&self.project_roots);
+        if !config.is_available() {
+            bail!("TTS Wibowo is not configured");
+        }
+        let created = Arc::new(WibowoService::new(config));
+        *service = Some(created.clone());
+        Ok(created)
+    }
+}
+
+impl WibowoService {
+    fn new(config: WibowoConfig) -> Self {
+        Self {
+            config,
+            process: Mutex::new(None),
+        }
+    }
+
+    async fn synthesize(&self, text: &str, output_path: &Path) -> Result<()> {
+        let mut process = self.process.lock().await;
+        if process.is_none() {
+            *process = Some(self.spawn().await?);
+        }
+
+        let result = match process.as_mut() {
+            Some(process) => process.synthesize(text, output_path).await,
+            None => bail!("TTS Wibowo service was not started"),
+        };
+
+        if result.is_err() {
+            if let Some(mut failed_process) = process.take() {
+                let _ = failed_process.child.kill().await;
+            }
+        }
+
+        result
+    }
+
+    async fn spawn(&self) -> Result<WibowoServiceProcess> {
+        let mut child = Command::new(&self.config.python)
+            .arg(&self.config.script)
+            .arg("--service")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .with_context(|| {
+                format!(
+                    "failed to start persistent TTS Wibowo service via {}",
+                    self.config.python.display()
+                )
+            })?;
+
+        let stdin = child
+            .stdin
+            .take()
+            .context("TTS Wibowo service stdin missing")?;
+        let stdout = child
+            .stdout
+            .take()
+            .context("TTS Wibowo service stdout missing")?;
+
+        Ok(WibowoServiceProcess {
+            child,
+            stdin,
+            stdout: BufReader::new(stdout).lines(),
+        })
+    }
+}
+
+impl WibowoServiceProcess {
+    async fn synthesize(&mut self, text: &str, output_path: &Path) -> Result<()> {
+        let output = output_path.to_str().with_context(|| {
+            format!(
+                "TTS output path is not valid UTF-8: {}",
+                output_path.display()
+            )
+        })?;
+        let request = WibowoServiceRequest { text, output };
+        let mut line = serde_json::to_string(&request).context("failed to encode TTS request")?;
+        line.push('\n');
+        self.stdin
+            .write_all(line.as_bytes())
+            .await
+            .context("failed to write TTS Wibowo service request")?;
+        self.stdin
+            .flush()
+            .await
+            .context("failed to flush TTS Wibowo service request")?;
+
+        let response_line = self
+            .stdout
+            .next_line()
+            .await
+            .context("failed to read TTS Wibowo service response")?
+            .context("TTS Wibowo service exited before responding")?;
+        let response: WibowoServiceResponse = serde_json::from_str(&response_line)
+            .with_context(|| format!("invalid TTS Wibowo service response: {response_line}"))?;
+        if !response.ok {
+            bail!(
+                "TTS Wibowo service failed: {}",
+                response.error.unwrap_or_else(|| "unknown error".to_owned())
+            );
         }
         Ok(())
     }
