@@ -291,7 +291,10 @@ fn ensure_natural_indonesian_ready(state: &AppState) -> Result<(), String> {
     let cache = AudioCache::new().map_err(|e| e.to_string())?;
     let tts = TtsEngine::with_project_roots(cache.root().clone(), state.tts_roots().to_vec());
 
-    if matches!(tts.natural_indonesian_status(), NaturalIndonesianStatus::Ready) {
+    if matches!(
+        tts.natural_indonesian_status(),
+        NaturalIndonesianStatus::Ready
+    ) {
         return Ok(());
     }
 

@@ -16,7 +16,10 @@ pub struct AppState {
 }
 
 impl AppState {
-    pub fn new(resource_root: Option<PathBuf>, writable_tts_root: Option<PathBuf>) -> anyhow::Result<Self> {
+    pub fn new(
+        resource_root: Option<PathBuf>,
+        writable_tts_root: Option<PathBuf>,
+    ) -> anyhow::Result<Self> {
         let project_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
         let mut tts_roots = Vec::new();
         let writable_tts_root = writable_tts_root.unwrap_or_else(|| project_root.clone());
@@ -59,7 +62,8 @@ pub fn run() {
         .setup(|app| {
             let resource_root = app.path().resolve(".", BaseDirectory::Resource).ok();
             let writable_tts_root = app.path().app_data_dir().ok();
-            let state = AppState::new(resource_root, writable_tts_root).map_err(|error| error.to_string())?;
+            let state = AppState::new(resource_root, writable_tts_root)
+                .map_err(|error| error.to_string())?;
             app.manage(state);
             app.manage(PlaybackState::new());
             app.manage(BookmarkState::new());
@@ -90,7 +94,7 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
-    use super::{include_project_tts_root, AppState};
+    use super::{AppState, include_project_tts_root};
 
     #[test]
     fn app_state_initializes_api_client() {
@@ -103,7 +107,8 @@ mod tests {
     fn app_state_prioritizes_resource_root_for_tts() {
         let resource_root = std::path::PathBuf::from("/tmp/equran-resource");
         let writable_root = std::path::PathBuf::from("/tmp/equran-writable");
-        let state = AppState::new(Some(resource_root.clone()), Some(writable_root.clone())).expect("AppState should initialize");
+        let state = AppState::new(Some(resource_root.clone()), Some(writable_root.clone()))
+            .expect("AppState should initialize");
 
         assert_eq!(state.tts_roots().first(), Some(&writable_root));
         assert_eq!(state.tts_roots().get(1), Some(&resource_root));
@@ -112,7 +117,8 @@ mod tests {
     #[test]
     fn app_state_tracks_writable_tts_root() {
         let writable_root = std::path::PathBuf::from("/tmp/equran-writable");
-        let state = AppState::new(None, Some(writable_root.clone())).expect("AppState should initialize");
+        let state =
+            AppState::new(None, Some(writable_root.clone())).expect("AppState should initialize");
 
         assert_eq!(state.writable_tts_root(), &writable_root);
     }

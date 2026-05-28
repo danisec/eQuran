@@ -36,6 +36,21 @@ pub enum PlaybackPhase {
     Cache,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct TtsGenerationPlan {
+    current_ayah: bool,
+    next_ayah: bool,
+}
+
+impl TtsGenerationPlan {
+    fn new(tts_enabled: bool, prefetch_tts: bool, has_next_ayah: bool) -> Self {
+        Self {
+            current_ayah: tts_enabled,
+            next_ayah: prefetch_tts && has_next_ayah,
+        }
+    }
+}
+
 impl PlaybackPhase {
     pub fn as_str(self) -> &'static str {
         match self {
@@ -261,18 +276,38 @@ impl PlaybackEngine {
             return Ok(());
         }
 
-        let prefetch_handle = if self.prefetch_tts {
-            if let Some(next) = next_ayah {
-                let next_translation = self.translation_for(next, english_surah, lang)?.to_owned();
-                let tts = self.tts.clone();
-                let next_ayah_number = next.nomor_ayat;
-                Some(tokio::spawn(async move {
-                    tts.synthesize_cached(&next_translation, lang, surah_number, next_ayah_number)
-                        .await
-                }))
-            } else {
-                None
-            }
+        let tts_generation_plan = TtsGenerationPlan::new(
+            self.tts_enabled.load(Ordering::Relaxed),
+            self.prefetch_tts,
+            next_ayah.is_some(),
+        );
+
+        let current_tts_handle = if tts_generation_plan.current_ayah {
+            let current_translation = translation.to_owned();
+            let tts = self.tts.clone();
+            let current_ayah_number = ayah.nomor_ayat;
+            Some(tokio::spawn(async move {
+                tts.synthesize_cached(
+                    &current_translation,
+                    lang,
+                    surah_number,
+                    current_ayah_number,
+                )
+                .await
+            }))
+        } else {
+            None
+        };
+
+        let prefetch_handle = if tts_generation_plan.next_ayah {
+            let next = next_ayah.expect("next ayah exists when prefetch is planned");
+            let next_translation = self.translation_for(next, english_surah, lang)?.to_owned();
+            let tts = self.tts.clone();
+            let next_ayah_number = next.nomor_ayat;
+            Some(tokio::spawn(async move {
+                tts.synthesize_cached(&next_translation, lang, surah_number, next_ayah_number)
+                    .await
+            }))
         } else {
             None
         };
@@ -302,7 +337,7 @@ impl PlaybackEngine {
             return Ok(());
         }
 
-        if self.tts_enabled.load(Ordering::Relaxed) {
+        if tts_generation_plan.current_ayah {
             self.emit_event(
                 on_event,
                 surah_number,
@@ -311,10 +346,15 @@ impl PlaybackEngine {
                 current,
                 total,
             );
-            let tts_path = self
-                .tts
-                .synthesize_cached(translation, lang, surah_number, ayah.nomor_ayat)
-                .await?;
+            let tts_path = if let Some(handle) = current_tts_handle {
+                handle
+                    .await
+                    .context("TTS generation task was cancelled")??
+            } else {
+                self.tts
+                    .synthesize_cached(translation, lang, surah_number, ayah.nomor_ayat)
+                    .await?
+            };
             self.emit_event(
                 on_event,
                 surah_number,
@@ -447,5 +487,13 @@ mod tests {
                 (3, PlaybackPhase::Recitation, 3, 3),
             ]
         );
+    }
+
+    #[test]
+    fn plans_current_tts_generation_during_recitation_when_translation_enabled() {
+        let plan = TtsGenerationPlan::new(true, true, true);
+
+        assert!(plan.current_ayah);
+        assert!(plan.next_ayah);
     }
 }

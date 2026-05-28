@@ -7,8 +7,8 @@ use equran_core::audio::{
     cache::AudioCache,
     tts::{NaturalIndonesianStatus, TtsEngine},
 };
-use serde::Serialize;
 use serde::Deserialize;
+use serde::Serialize;
 use sha2::{Digest, Sha256};
 use tauri::{Emitter, State, Window};
 use tokio::{fs, process::Command};
@@ -166,12 +166,7 @@ pub async fn install_natural_indonesian_voice(
         return Ok(());
     }
 
-    emit_install_progress(
-        &window,
-        "failed",
-        &refreshed_status.message,
-        None,
-    );
+    emit_install_progress(&window, "failed", &refreshed_status.message, None);
 
     Err(refreshed_status.message)
 }
@@ -224,12 +219,18 @@ async fn load_voice_manifest(
         if !manifest_url.trim().is_empty() {
             let manifest = reqwest::get(manifest_url.trim())
                 .await
-                .map_err(|error| format!("Failed to download Natural Indonesian Voice manifest: {error}"))?
+                .map_err(|error| {
+                    format!("Failed to download Natural Indonesian Voice manifest: {error}")
+                })?
                 .error_for_status()
-                .map_err(|error| format!("Natural Indonesian Voice manifest request failed: {error}"))?
+                .map_err(|error| {
+                    format!("Natural Indonesian Voice manifest request failed: {error}")
+                })?
                 .json::<NaturalIndonesianVoiceManifest>()
                 .await
-                .map_err(|error| format!("Failed to read Natural Indonesian Voice manifest: {error}"))?;
+                .map_err(|error| {
+                    format!("Failed to read Natural Indonesian Voice manifest: {error}")
+                })?;
             return Ok(Some(manifest));
         }
     }
@@ -241,7 +242,9 @@ async fn load_voice_manifest(
                 format!("Failed to read Natural Indonesian Voice manifest: {error}")
             })?;
             let manifest = serde_json::from_str::<NaturalIndonesianVoiceManifest>(&manifest_text)
-                .map_err(|error| format!("Failed to parse Natural Indonesian Voice manifest: {error}"))?;
+                .map_err(|error| {
+                format!("Failed to parse Natural Indonesian Voice manifest: {error}")
+            })?;
             return Ok(Some(manifest));
         }
     }
@@ -288,9 +291,10 @@ async fn install_voice_pack_from_manifest(
     fs::create_dir_all(state.writable_tts_root())
         .await
         .map_err(|error| format!("Failed to create Natural Indonesian Voice directory: {error}"))?;
-    let archive_path = state
-        .writable_tts_root()
-        .join(format!("natural-indonesian-voice-{}.tar.zst", manifest.version));
+    let archive_path = state.writable_tts_root().join(format!(
+        "natural-indonesian-voice-{}.tar.zst",
+        manifest.version
+    ));
     fs::write(&archive_path, &archive_bytes)
         .await
         .map_err(|error| format!("Failed to save Natural Indonesian Voice archive: {error}"))?;
@@ -316,7 +320,10 @@ fn validate_voice_manifest(manifest: &NaturalIndonesianVoiceManifest) -> Result<
     }
 
     if manifest.parts.is_empty() {
-        return Err("Natural Indonesian Voice manifest must include a URL or release asset parts.".to_owned());
+        return Err(
+            "Natural Indonesian Voice manifest must include a URL or release asset parts."
+                .to_owned(),
+        );
     }
 
     if manifest.parts.iter().any(|part| part.url.trim().is_empty()) {
@@ -359,7 +366,10 @@ async fn download_voice_archive(
         )
         .await
         .map_err(|error| {
-            format!("Failed to download Natural Indonesian Voice part {}: {error}", index + 1)
+            format!(
+                "Failed to download Natural Indonesian Voice part {}: {error}",
+                index + 1
+            )
         })?;
         if let Some(expected_size) = part.size {
             if part_bytes.len() as u64 != expected_size {
@@ -403,7 +413,8 @@ async fn download_bytes_with_progress(
         *downloaded_total += chunk.len() as u64;
         bytes.extend_from_slice(&chunk);
         if let Some(total_size) = total_size.filter(|size| *size > 0) {
-            let raw_percent = ((*downloaded_total as f64 / total_size as f64) * 100.0).round() as u8;
+            let raw_percent =
+                ((*downloaded_total as f64 / total_size as f64) * 100.0).round() as u8;
             let percent = raw_percent.min(99);
             emit_install_progress(
                 window,
@@ -447,7 +458,9 @@ async fn extract_tar_zst(archive_path: &Path, destination: &Path) -> Result<(), 
     if stderr.is_empty() {
         Err("Natural Indonesian Voice archive extraction failed.".to_owned())
     } else {
-        Err(format!("Natural Indonesian Voice archive extraction failed: {stderr}"))
+        Err(format!(
+            "Natural Indonesian Voice archive extraction failed: {stderr}"
+        ))
     }
 }
 
@@ -476,12 +489,7 @@ async fn prepare_writable_setup_dir(
     Ok(target_dir)
 }
 
-fn emit_install_progress(
-    window: &Window,
-    step: &str,
-    message: &str,
-    percent: Option<u8>,
-) {
+fn emit_install_progress(window: &Window, step: &str, message: &str, percent: Option<u8>) {
     let payload = NaturalIndonesianInstallProgressPayload {
         step: step.to_owned(),
         message: message.to_owned(),
@@ -545,13 +553,22 @@ mod tests {
 
     #[test]
     fn verifies_matching_sha256() {
-        assert!(verify_sha256(b"equran", "f8f7ca4a850aa1ffaf1c0fb1965a7a3c21f08ba707745f182aab353ed2c624cd").is_ok());
+        assert!(
+            verify_sha256(
+                b"equran",
+                "f8f7ca4a850aa1ffaf1c0fb1965a7a3c21f08ba707745f182aab353ed2c624cd"
+            )
+            .is_ok()
+        );
     }
 
     #[test]
     fn rejects_mismatched_sha256() {
-        let error = verify_sha256(b"equran", "0000000000000000000000000000000000000000000000000000000000000000")
-            .expect_err("wrong checksum should fail");
+        let error = verify_sha256(
+            b"equran",
+            "0000000000000000000000000000000000000000000000000000000000000000",
+        )
+        .expect_err("wrong checksum should fail");
 
         assert!(error.contains("checksum"));
     }
