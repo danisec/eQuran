@@ -34,6 +34,53 @@ export function isTafsirVoiceActive(surahNumber: number, ayahNumber: number) {
   return tafsirVoiceState.activeKey === `${surahNumber}:${ayahNumber}`;
 }
 
+let voicePollTimer: ReturnType<typeof setInterval> | null = null;
+
+/**
+ * The tafsir voice button lives in a different component tree than the
+ * playback controls, so the authoritative "still speaking" flag is polled from
+ * the backend. Without this the button stays stuck on "Membacakan..." after
+ * playback ends.
+ */
+async function syncTafsirVoiceState() {
+  try {
+    const active = await invoke<boolean>('is_tafsir_voice_active');
+    if (!active && tafsirVoiceState.activeKey) {
+      tafsirVoiceState.activeKey = '';
+      tafsirVoiceState.paused = false;
+      tafsirState.speakingKey = '';
+      return;
+    }
+
+    if (active) {
+      tafsirVoiceState.paused = await invoke<boolean>('is_tafsir_voice_paused');
+    }
+  } catch {
+    // Backend not ready yet; the next tick retries.
+  }
+}
+
+/** Starts polling the backend so the tafsir voice button can settle. */
+export function startTafsirVoicePolling() {
+  if (voicePollTimer) {
+    return;
+  }
+
+  void syncTafsirVoiceState();
+  voicePollTimer = setInterval(() => {
+    if (tafsirVoiceState.activeKey) {
+      void syncTafsirVoiceState();
+    }
+  }, 500);
+}
+
+export function stopTafsirVoicePolling() {
+  if (voicePollTimer) {
+    clearInterval(voicePollTimer);
+    voicePollTimer = null;
+  }
+}
+
 export async function loadTafsir(surahNumber: number) {
   if (tafsirState.cache.has(surahNumber)) {
     return tafsirState.cache.get(surahNumber);
