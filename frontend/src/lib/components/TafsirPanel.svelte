@@ -1,9 +1,11 @@
 <script lang="ts">
   import Icon from '$lib/components/Icon.svelte';
   import { t } from '$lib/i18n';
+  import { playbackState } from '$lib/stores/playback.svelte';
   import { surahState } from '$lib/stores/surah.svelte';
   import {
     isTafsirVoiceActive,
+    loadTafsir,
     pauseTafsirVoice,
     playTafsirVoice,
     resumeTafsirVoice,
@@ -25,6 +27,18 @@
   let speaking = $derived(tafsirState.speakingKey === `${surahState.selected.nomor}:${ayahNumber}`);
   let voiceActive = $derived(isTafsirVoiceActive(surahState.selected.nomor, ayahNumber));
   let voicePaused = $derived(voiceActive && tafsirVoiceState.paused);
+
+  // Switching the translation language while this panel is open must replace
+  // the commentary, not leave the previous language in place.
+  $effect(() => {
+    const surahNumber = surahState.selected.nomor;
+    if (
+      !tafsirForAyah(surahNumber, ayahNumber, playbackState.lang) &&
+      tafsirState.loadingSurah !== surahNumber
+    ) {
+      void loadTafsir(surahNumber, playbackState.lang);
+    }
+  });
 </script>
 
 <section class="tafsir-panel">

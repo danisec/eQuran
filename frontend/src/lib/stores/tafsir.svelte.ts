@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
+import { playbackState } from './playback/state.svelte';
 import { surahState } from './surah.svelte';
 
 export type TafsirAyah = {
@@ -18,11 +19,16 @@ export type TafsirSurah = {
 };
 
 export const tafsirState = $state({
-  cache: new Map<number, TafsirSurah>(),
+  /** Keyed by `<language>:<surah>` so switching languages cannot reuse text. */
+  cache: new Map<string, TafsirSurah>(),
   loadingSurah: 0,
   speakingKey: '',
   error: ''
 });
+
+function cacheKey(lang: string, surahNumber: number) {
+  return `${lang}:${surahNumber}`;
+}
 
 /** Ayah whose tafsir voice is currently being generated or played. */
 export const tafsirVoiceState = $state({
@@ -81,17 +87,19 @@ export function stopTafsirVoicePolling() {
   }
 }
 
-export async function loadTafsir(surahNumber: number) {
-  if (tafsirState.cache.has(surahNumber)) {
-    return tafsirState.cache.get(surahNumber);
+export async function loadTafsir(surahNumber: number, lang = playbackState.lang) {
+  const key = cacheKey(lang, surahNumber);
+  const cached = tafsirState.cache.get(key);
+  if (cached) {
+    return cached;
   }
 
   tafsirState.loadingSurah = surahNumber;
   tafsirState.error = '';
   try {
-    const tafsir = await invoke<TafsirSurah>('get_tafsir', { number: surahNumber });
-    tafsirState.cache = new Map(tafsirState.cache).set(surahNumber, tafsir);
-    attachTafsirToSelectedSurah(surahNumber);
+    const tafsir = await invoke<TafsirSurah>('get_tafsir', { number: surahNumber, lang });
+    tafsirState.cache = new Map(tafsirState.cache).set(key, tafsir);
+    attachTafsirToSelectedSurah(surahNumber, lang);
     return tafsir;
   } catch (error) {
     tafsirState.error = error instanceof Error ? error.message : String(error);
@@ -103,8 +111,14 @@ export async function loadTafsir(surahNumber: number) {
   }
 }
 
-export function tafsirForAyah(surahNumber: number, ayahNumber: number) {
-  return tafsirState.cache.get(surahNumber)?.tafsir.find((tafsir) => tafsir.ayat === ayahNumber);
+export function tafsirForAyah(
+  surahNumber: number,
+  ayahNumber: number,
+  lang = playbackState.lang
+) {
+  return tafsirState.cache
+    .get(cacheKey(lang, surahNumber))
+    ?.tafsir.find((tafsir) => tafsir.ayat === ayahNumber);
 }
 
 /**
@@ -113,31 +127,40 @@ export function tafsirForAyah(surahNumber: number, ayahNumber: number) {
  * Used by the translation voice so English playback can read the tafsir of the
  * ayah instead of the Indonesian verse translation.
  */
-export async function tafsirTextForAyah(surahNumber: number, ayahNumber: number): Promise<string> {
-  const cached = tafsirForAyah(surahNumber, ayahNumber);
+export async function tafsirTextForAyah(
+  surahNumber: number,
+  ayahNumber: number,
+  lang = playbackState.lang
+): Promise<string> {
+  const cached = tafsirForAyah(surahNumber, ayahNumber, lang);
   if (cached) {
     return cached.teks;
   }
 
-  const surah = await loadTafsir(surahNumber);
+  const surah = await loadTafsir(surahNumber, lang);
   return surah?.tafsir.find((tafsir) => tafsir.ayat === ayahNumber)?.teks ?? '';
 }
 
 /**
  * Copies the loaded tafsir into `surahState.selected.ayat` so the playback
  * engine can read it without another round trip.
+ *
+ * The guard keeps a slow request from the previous language from overwriting
+ * the text the reader is currently looking at.
  */
-export function attachTafsirToSelectedSurah(surahNumber: number) {
-  const tafsir = tafsirState.cache.get(surahNumber);
+export function attachTafsirToSelectedSurah(surahNumber: number, lang = playbackState.lang) {
+  if (lang !== playbackState.lang) {
+    return;
+  }
+
+  const tafsir = tafsirState.cache.get(cacheKey(lang, surahNumber));
   if (!tafsir || surahState.selected.nomor !== surahNumber) {
     return;
   }
 
   for (const ayah of surahState.selected.ayat) {
     const match = tafsir.tafsir.find((entry) => entry.ayat === ayah.nomorAyat);
-    if (match) {
-      ayah.tafsir = match.teks;
-    }
+    ayah.tafsir = match?.teks;
   }
 }
 
@@ -151,7 +174,8 @@ export async function playTafsirVoice(surahNumber: number, ayahNumber: number, t
     await invoke('play_tafsir_voice', {
       surahNumber,
       ayahNumber,
-      text
+      text,
+      lang: playbackState.lang
     });
   } catch (error) {
     tafsirState.error = error instanceof Error ? error.message : String(error);
