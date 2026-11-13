@@ -57,14 +57,14 @@
       title={t('marks.close')}
       onclick={toggleMarks}
     >
-      <Icon name="close" size={16} />
+      <Icon name="close" />
     </button>
   </header>
 
   <div class="min-h-0 flex-1 overflow-y-auto px-2 pb-4">
     {#if bookmarkState.list.length === 0}
       <div class="flex flex-col items-center gap-2 px-4 py-12 text-center">
-        <Icon name="bookmark" size={22} />
+        <Icon name="bookmark" size={24} />
         <p class="text-[14px] text-[var(--text)]">{t('nav.noBookmarks')}</p>
         <p class="meta max-w-[28ch] leading-relaxed">{t('nav.noBookmarksHint')}</p>
       </div>
@@ -82,7 +82,7 @@
                 type="button"
                 onclick={() => openMark(mark.surah, mark.ayah)}
               >
-                <VerseRosette number={mark.ayah} size={28} />
+                <VerseRosette number={mark.ayah} size={32} />
                 <span class="min-w-0 flex-1">
                   <span class="mark-ref">
                     {t('marks.ref', mark.surahName, mark.surah, mark.ayah)}
@@ -100,7 +100,7 @@
                 title={t('nav.removeBookmark')}
                 onclick={() => removeBookmark(mark.surah, mark.ayah)}
               >
-                <Icon name="close" size={14} />
+                <Icon name="close" />
               </button>
             </div>
           {/each}
@@ -140,15 +140,20 @@
   flex: 1;
   align-items: flex-start;
   gap: 12px;
-  padding: 10px 8px;
+  padding: 12px 8px;
   border: 0;
   border-radius: var(--r-control);
   background: transparent;
   text-align: left;
 }
 
+/* The reference line is exactly as tall as the medallion beside it, so the
+   ayah number and its citation share one centre line. */
 .mark-ref {
-  display: block;
+  display: flex;
+  align-items: center;
+  min-height: 32px;
+  padding-right: 44px;
   font-size: 12px;
   font-weight: 500;
   color: var(--accent);
@@ -174,20 +179,26 @@
   color: var(--text-secondary);
 }
 
+/* One control size with the header: 34px box, 18px glyph. `top: 11px` puts its
+   centre on the medallion's centre (padding 12 + half of 32) exactly. */
 .mark-remove {
   position: absolute;
-  top: 6px;
-  right: 6px;
-  width: 28px;
-  height: 28px;
+  top: 11px;
+  right: 8px;
+  width: 34px;
+  height: 34px;
   opacity: 0;
+  pointer-events: none;
   transition:
     opacity var(--speed-fast) var(--ease),
     background-color var(--speed-fast) var(--ease),
     color var(--speed-fast) var(--ease);
 }
 
+.mark-row:hover .mark-remove,
+.mark-row:focus-within .mark-remove,
 .mark-remove:focus-visible {
   opacity: 1;
+  pointer-events: auto;
 }
 </style>
