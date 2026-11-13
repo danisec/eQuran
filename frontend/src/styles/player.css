@@ -1,0 +1,194 @@
+/* Player bar and playback controls */
+
+/* ------------------------------------------------------ player footer --- */
+
+.player-bar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 24px;
+  min-height: 80px;
+  padding: 12px 32px;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  box-shadow: var(--shadow-raised);
+}
+
+/* In Baca the bar floats over the scroll area, so it lifts off the page. */
+.player-bar-layer {
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  z-index: 20;
+}
+
+.player-now-playing {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 16px;
+}
+
+.player-thumb {
+  display: grid;
+  width: 52px;
+  height: 52px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: var(--r-control);
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: 20px;
+}
+
+.player-meta {
+  min-width: 0;
+}
+
+.player-title {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.player-sub {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+/* A failed session or a skipped translation names its cause in place, so the
+   reader does not have to open Settings to find out why nothing played. */
+.player-sub.is-error {
+  color: var(--mark);
+}
+
+.player-center {
+  display: flex;
+  width: min(28rem, 100%);
+  flex-direction: column;
+  justify-self: center;
+  gap: 8px;
+}
+
+/* The third grid column balances the now-playing block so the transport stays
+   optically centred. It also carries the only way out of the session. */
+.player-trailing {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.player-progress {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+
+.player-progress-track {
+  position: relative;
+  height: 4px;
+  flex: 1;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--track);
+}
+
+.player-progress-fill {
+  position: absolute;
+  inset-block: 0;
+  left: 0;
+  border-radius: 2px;
+  background: var(--accent);
+  transition: width var(--speed) var(--ease);
+}
+
+/* --------------------------------------------------- playback buttons --- */
+
+.playback-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.playback-control-button {
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-control);
+  background: var(--surface);
+  color: var(--text-secondary);
+  transition:
+    background-color var(--speed-fast) var(--ease),
+    border-color var(--speed-fast) var(--ease),
+    color var(--speed-fast) var(--ease),
+    transform var(--speed-fast) var(--ease);
+}
+
+/* At the first or last ayah the skip control is genuinely unavailable: dim it
+   rather than leaving a button that looks live and does nothing. */
+.playback-control-button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.playback-control-button:hover {
+  background: var(--raised);
+  color: var(--text);
+}
+
+.playback-control-button:active {
+  transform: scale(0.97);
+}
+
+.playback-control-button svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.playback-control-secondary {
+  width: 36px;
+  height: 36px;
+}
+
+.playback-control-secondary.is-active {
+  border-color: transparent;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.playback-control-primary {
+  width: 44px;
+  height: 44px;
+  border-color: transparent;
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.playback-control-primary:hover {
+  background: var(--accent-hover);
+  color: var(--on-accent);
+}
+
+.playback-control-primary svg {
+  fill: currentColor;
+  stroke: none;
+  width: 20px;
+  height: 20px;
+}
+
+.playback-icon-play {
+  margin-left: 2px;
+}

@@ -1,0 +1,40 @@
+/* Narrow windows and reduced motion */
+
+@media (max-width: 1180px) {
+  .focus-surah-title {
+    position: static;
+    transform: none;
+    margin-right: auto;
+  }
+  .focus-verse-card {
+    width: min(72rem, calc(100vw - 4rem));
+  }
+  .player-now-playing {
+    display: none;
+  }
+  /* On a narrow window the marks rail would squeeze the reading column, so it
+     leaves the grid and floats over the reader instead, pinned to the right. */
+  .app-shell {
+    grid-template-columns: var(--col-left, 0px) minmax(0, 1fr) 0px !important;
+  }
+  .marks-rail:not(.is-open) {
+    display: none;
+  }
+  .marks-rail.is-open {
+    position: absolute;
+    inset-block: 0;
+    right: 0;
+    width: min(340px, 82vw);
+    z-index: 25;
+    box-shadow: var(--shadow-overlay);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 1ms !important;
+    animation-duration: 1ms !important;
+  }
+}

@@ -1,0 +1,79 @@
+/* Reset, typography defaults and the theme swap */
+
+body {
+  margin: 0;
+  min-width: 1024px;
+  min-height: 768px;
+  overflow: hidden;
+  background: var(--page);
+  color: var(--text);
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: default;
+}
+
+/* Keyboard users get a ring; pointer users never see one */
+:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+/* Metre and meta read as one column everywhere */
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+.arabic {
+  font-family: Amiri, 'Noto Naskh Arabic', 'Traditional Arabic', serif;
+  direction: rtl;
+  unicode-bidi: isolate;
+}
+
+/* Theme change: the new surface is clipped to a circle growing from the button,
+   so the two snapshots must not cross-fade on their own. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+::view-transition-old(root) {
+  z-index: 1;
+}
+
+::view-transition-new(root) {
+  z-index: 2;
+}
+
+/*
+ * While the theme flips, every element's own transition is switched off.
+ *
+ * Without this, adding `.dark` starts one background/border/colour animation
+ * per element — well over a thousand on a long surah — and they run on the main
+ * thread alongside the reveal, which is what made the swap stutter. The class is
+ * added just before the swap and removed once the view transition settles, so
+ * this rule is only ever live for a few hundred milliseconds.
+ */
+.theme-swapping *,
+.theme-swapping *::before,
+.theme-swapping *::after {
+  transition: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation: none;
+  }
+}

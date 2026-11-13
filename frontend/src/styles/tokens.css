@@ -1,0 +1,97 @@
+/* Design tokens for light and dark */
+
+/*
+ * eQuran — a mushaf you read and listen to.
+ *
+ * One neutral ramp tinted the colour of the page (cool slate-blue), three text
+ * roles, a single accent that only marks the primary action and the selection,
+ * and a warm rust reserved for the reader's own marks (bookmarks). The theme
+ * swap is a token swap, never a rule swap.
+ */
+
+:root {
+  color-scheme: light;
+
+  /* Surfaces, from the page up to the raised control */
+  --page: #f5f8fb;
+  --surface: #ffffff;
+  --raised: #eef3f8;
+
+  /* Switch and progress tracks are their own pair: the track has to read as a
+     track against the surface it sits on, and the knob has to read against the
+     track. Light carries the knob with `--shadow-card`; dark has no shadows, so
+     there the knob is lifted off its track in colour instead. */
+  --track: #e6eef6;
+  --knob: #ffffff;
+  --border: rgba(22, 41, 60, 0.1);
+  --border-strong: rgba(22, 41, 60, 0.18);
+
+  /* Three text roles, not ten */
+  --text: #16293c;
+  --text-secondary: #45586b;
+  --text-muted: #6d7f92;
+
+  /* One accent, used rarely */
+  --accent: #1b4a75;
+  --accent-hover: #16405f;
+  --accent-soft: rgba(27, 74, 117, 0.09);
+  --on-accent: #f4f8fc;
+  --on-accent-muted: rgba(244, 248, 252, 0.72);
+
+  /* The reader's own ink: bookmarks */
+  --mark: #9c4a33;
+  --mark-soft: rgba(156, 74, 51, 0.1);
+
+  --ring: #2a669c;
+  --shadow-card: 0 1px 2px rgba(16, 35, 54, 0.05);
+  --shadow-raised: 0 6px 20px rgba(16, 35, 54, 0.09);
+  --shadow-overlay: 0 20px 48px rgba(16, 35, 54, 0.16);
+
+  --r-control: 10px;
+  --r-card: 16px;
+  --r-panel: 18px;
+
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+  --speed-fast: 120ms;
+  --speed: 180ms;
+
+  font-family: 'IBM Plex Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--text);
+  background: var(--page);
+  -webkit-font-smoothing: antialiased;
+}
+
+.dark {
+  color-scheme: dark;
+
+  --page: #0e1620;
+  --surface: #15202c;
+  --raised: #1d2a38;
+
+  /* Dark has no shadows, so the track is a lighter step of the ramp and the knob
+     is a light disc that reads against it without a shadow. */
+  --track: #2b3a48;
+  --knob: #d7e2ee;
+  --border: rgba(151, 180, 209, 0.14);
+  --border-strong: rgba(151, 180, 209, 0.26);
+
+  --text: #e6edf4;
+  --text-secondary: #a8b8c8;
+  --text-muted: #8a9cae;
+
+  --accent: #6a93bd;
+  --accent-hover: #7fa3c9;
+  --accent-soft: rgba(106, 147, 189, 0.14);
+  --on-accent: #0e1620;
+  --on-accent-muted: rgba(14, 22, 32, 0.85);
+
+  --mark: #d78d72;
+  --mark-soft: rgba(215, 141, 114, 0.14);
+
+  --ring: #6a93bd;
+  --shadow-card: none;
+  --shadow-raised: none;
+  --shadow-overlay: 0 24px 56px rgba(0, 0, 0, 0.5);
+}

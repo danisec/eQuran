@@ -1,0 +1,36 @@
+/* Compact surah switcher */
+
+/* The reader's compact surah switcher, anchored under its button */
+.surah-picker {
+  position: absolute;
+  z-index: 40;
+  right: 0;
+  top: calc(100% + 6px);
+  width: min(360px, 84vw);
+  overflow: hidden;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-card);
+  background: var(--surface);
+  box-shadow: var(--shadow-overlay);
+}
+
+.surah-picker-row {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 10px;
+  padding: 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  text-align: left;
+  transition: background-color var(--speed-fast) var(--ease);
+}
+
+.surah-picker-row:hover {
+  background: var(--raised);
+}
+
+.surah-picker-row.is-current {
+  background: var(--accent-soft);
+}

@@ -1,0 +1,184 @@
+/* Home search, results and continue cards */
+
+/* ---------------------------------------------------------- home page --- */
+
+.home-search {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 12px;
+  height: 52px;
+  padding: 0 16px;
+  border: 1px solid var(--border-strong);
+  border-radius: 14px;
+  background: var(--surface);
+  transition: border-color var(--speed-fast) var(--ease);
+}
+
+.home-search:focus-within {
+  border-color: var(--accent);
+}
+
+.home-search svg {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+  fill: none;
+  stroke: var(--text-muted);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.home-search input {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font-size: 16px;
+  outline: none;
+}
+
+.home-search input::placeholder {
+  color: var(--text-muted);
+}
+
+.chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.chip {
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text-secondary);
+  font-size: 13px;
+  transition: border-color var(--speed-fast) var(--ease), color var(--speed-fast) var(--ease);
+}
+
+.chip:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.result-row {
+  display: grid;
+  width: 100%;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 16px;
+  align-items: start;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  background: var(--surface);
+  text-align: left;
+  transition: border-color var(--speed-fast) var(--ease);
+}
+
+.result-row:hover {
+  border-color: var(--accent);
+}
+
+.result-ref {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--accent);
+}
+
+.result-snippet {
+  margin-top: 6px;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--text-secondary);
+}
+
+.result-snippet mark {
+  border-radius: 3px;
+  background: var(--accent-soft);
+  color: inherit;
+  padding: 0 2px;
+}
+
+.result-arabic {
+  margin-top: 6px;
+  font-size: 22px;
+  line-height: 1.9;
+  color: var(--text);
+}
+
+.result-actions {
+  display: flex;
+  gap: 8px;
+}
+
+
+
+.continue-card {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  background: var(--surface);
+  text-align: left;
+  transition: border-color var(--speed-fast) var(--ease);
+}
+
+.continue-card:hover {
+  border-color: var(--accent);
+}
+
+/* One entry of the surah index: number, name, meaning, Arabic name */
+.surah-tile {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-control);
+  background: var(--surface);
+  text-align: left;
+  transition:
+    border-color var(--speed-fast) var(--ease),
+    background-color var(--speed-fast) var(--ease);
+}
+
+.surah-tile:hover {
+  border-color: var(--border-strong);
+  background: var(--raised);
+}
+
+.surah-tile.is-current {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.surah-tile-name {
+  display: block;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.3;
+  color: var(--text);
+}
+
+/* The Arabic name needs its own line budget: Arabic glyphs are wider than the
+   Latin they sit beside, and a fixed 20px box clipped the tail of long names. */
+.surah-tile-arabic {
+  flex: 0 0 auto;
+  max-width: 42%;
+  font-size: 20px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

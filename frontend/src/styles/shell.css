@@ -1,0 +1,33 @@
+/* App shell, hairlines and panes */
+
+/* The app shell: page background, hairline edge, no glow. The track widths
+   change when the rails open or close, so the columns tween rather than snap. */
+.app-shell {
+  background: var(--page);
+  border-color: var(--border);
+  transition: grid-template-columns var(--speed) var(--ease);
+}
+
+/* On a heavy surah the rail snaps instead of tweening (see `toggleSidebar`):
+   the width change would otherwise re-lay-out every verse card each frame. */
+.rail-snapping .app-shell,
+.rail-snapping .nav-row,
+.rail-snapping .nav-row-name,
+.rail-snapping .nav-row-meta {
+  transition: none !important;
+}
+
+.pane {
+  background: var(--raised);
+  border-color: var(--border);
+}
+
+.hairline-t {
+  border-top: 1px solid var(--border);
+}
+.hairline-r {
+  border-right: 1px solid var(--border);
+}
+.hairline-l {
+  border-left: 1px solid var(--border);
+}

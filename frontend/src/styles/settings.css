@@ -1,0 +1,36 @@
+/* Playback settings dialog */
+
+/* Settings live in a dialog, not a permanent column: five controls that are
+   set once should not cost the reading column a fifth of the window. */
+.settings-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.settings-backdrop {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  background: rgba(10, 18, 27, 0.56);
+  cursor: default;
+}
+
+.dark .settings-backdrop {
+  background: rgba(0, 0, 0, 0.62);
+}
+
+.settings-dialog {
+  position: relative;
+  width: min(520px, 100%);
+  max-height: min(760px, 100%);
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--r-panel);
+  background: var(--surface);
+  padding: 24px;
+  box-shadow: var(--shadow-overlay);
+}
