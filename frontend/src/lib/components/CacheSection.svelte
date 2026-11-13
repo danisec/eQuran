@@ -50,3 +50,109 @@
     </div>
   {/if}
 </div>
+
+<style>
+  /* Advanced disclosure */
+  .advanced-settings {
+    border-top: 1px solid var(--border);
+    padding-top: 16px;
+  }
+  
+  .advanced-settings-trigger {
+    display: flex;
+    width: 100%;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--r-control);
+    background: var(--surface);
+    color: var(--text);
+    text-align: left;
+    transition: border-color var(--speed-fast) var(--ease), background-color var(--speed-fast) var(--ease);
+  }
+  
+  .advanced-settings-trigger:hover,
+  .advanced-settings-trigger[aria-expanded='true'] {
+    border-color: var(--border-strong);
+    background: var(--raised);
+  }
+  
+  .advanced-settings-title {
+    display: block;
+    font-size: 14px;
+    font-weight: 500;
+  }
+  
+  .advanced-settings-summary {
+    display: block;
+    margin-top: 2px;
+    color: var(--text-muted);
+    font-size: 12px;
+  }
+  
+  :global(.advanced-settings-chevron) {
+    width: 16px;
+    height: 16px;
+    flex: 0 0 auto;
+    color: var(--text-muted);
+    transition: transform var(--speed-fast) var(--ease);
+  }
+  
+  :global(.advanced-settings-chevron.open) {
+    transform: rotate(180deg);
+  }
+  
+  .cache-status-panel {
+    margin-top: 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--r-control);
+    background: var(--surface);
+    padding: 16px;
+  }
+  
+  .cache-status-title {
+    margin-bottom: 10px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text);
+  }
+  
+  .cache-status-copy {
+    margin-bottom: 12px;
+    color: var(--text-muted);
+    font-size: 12px;
+    line-height: 1.45;
+  }
+  
+  .cache-status-track {
+    height: 6px;
+    overflow: hidden;
+    border-radius: 3px;
+    background: var(--track);
+  }
+  
+  .cache-status-fill {
+    height: 100%;
+    border-radius: 3px;
+    background: var(--accent);
+    transition: width var(--speed) var(--ease);
+  }
+  
+  .cache-status-live {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 12px;
+    color: var(--text-muted);
+    font-size: 12px;
+  }
+  
+  .cache-status-live span {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+  }
+</style>

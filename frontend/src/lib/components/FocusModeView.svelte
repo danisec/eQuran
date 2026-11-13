@@ -130,3 +130,120 @@
     onClose={() => void endPlayback()}
   />
 </section>
+
+<style>
+.focus-mode-screen {
+  position: relative;
+  display: grid;
+  height: 100vh;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  overflow: hidden;
+  padding: 24px 32px;
+  background: var(--page);
+  color: var(--text);
+}
+
+.focus-mode-header {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-height: 40px;
+  padding-bottom: 16px;
+}
+
+.focus-surah-title {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  text-align: center;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.focus-phase-pill {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.focus-close {
+  position: relative;
+  z-index: 1;
+}
+
+.focus-verse-card {
+  display: flex;
+  width: min(72rem, calc(100vw - 8rem));
+  max-height: min(33rem, calc(100vh - 15.5rem));
+  flex-direction: column;
+  align-self: center;
+  justify-self: center;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: var(--surface);
+  padding: 28px;
+  box-shadow: var(--shadow-raised);
+}
+
+.focus-card-meta {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.focus-verse-scroll {
+  position: relative;
+  z-index: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 4px 4px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+
+.focus-arabic {
+  font-size: 44px;
+  line-height: 1.9;
+  color: var(--text);
+  text-align: center;
+}
+
+.focus-latin {
+  margin-top: 16px;
+  font-family: 'IBM Plex Serif', Georgia, serif;
+  font-size: 20px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.focus-divider {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin: 20px 0;
+  color: var(--border-strong);
+}
+
+.focus-divider span {
+  height: 1px;
+  width: 48px;
+  background: currentColor;
+}
+
+.focus-translation {
+  font-size: 17px;
+  line-height: 1.7;
+  color: var(--text-secondary);
+  text-align: center;
+}
+</style>

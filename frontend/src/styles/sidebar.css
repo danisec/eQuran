@@ -2,47 +2,11 @@
 
 /* ------------------------------------------------------------- sidebar --- */
 
-.nav-row {
-  position: relative;
-  isolation: isolate;
-  display: grid;
-  width: 100%;
-  grid-template-columns: 24px minmax(0, 1fr) auto;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  height: 44px;
-  padding: 0 10px;
-  border: 0;
-  border-radius: var(--r-control);
-  background: transparent;
-  color: var(--text);
-  text-align: left;
-  /* The track widths and gap collapse to a single icon column when the rail
-     narrows, so they tween alongside the rail itself rather than snapping.
-     `justify-content: center` only bites once the tracks are narrower than the
-     row (the collapsed case); expanded, the 1fr track fills the row. */
-  transition:
-    background-color var(--speed-fast) var(--ease),
-    color var(--speed-fast) var(--ease),
-    grid-template-columns var(--speed) var(--ease),
-    column-gap var(--speed) var(--ease);
-}
-
-/* The current row: an accent pill inside the rail. It sits within the nav's
-   inset rather than bleeding to an edge, so the rail stays a quiet column and
-   only the row itself carries colour. */
-.nav-row:hover {
-  background: var(--surface);
-}
-
 .nav-row.is-current {
   background: var(--accent);
   color: var(--on-accent);
 }
 
-/* An auxiliary panel that is open: a surface step and a hairline, not the
-   accent, because this row is not the current page. */
 .nav-row.is-open {
   background: var(--surface);
   box-shadow: inset 0 0 0 1px var(--border-strong);
@@ -81,39 +45,6 @@
   transition: opacity var(--speed) var(--ease);
 }
 
-
-/* --------------------------------------------------------------- footer --- */
-
-/* The footer folds as the rail narrows. With `flex-wrap`, the buttons drop onto
-   their own lines once the width can no longer hold them, so the same width
-   animation that moves the rail also restacks the footer — no discrete
-   `flex-direction` switch to pop. */
-.sidebar-foot {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 12px 16px;
-  transition: padding var(--speed) var(--ease);
-}
-
-.sidebar-utils {
-  display: flex;
-  flex-wrap: wrap;
-  min-width: 0;
-  align-items: center;
-  gap: 4px;
-  transition: gap var(--speed) var(--ease);
-}
-
-
-/* ---------------------------------------------------- collapsed rail --- */
-
-/* Collapsed, the rail keeps a 64px icon column instead of disappearing, so the
-   reader never loses navigation or the footer utilities. The rows stay a grid
-   and the tracks collapse (1fr -> 0), so the icon slides to the centre while the
-   rail narrows instead of snapping. */
 .sidebar.is-collapsed nav {
   padding-left: 10px;
   padding-right: 10px;
@@ -124,33 +55,11 @@
   gap: 0;
 }
 
-.sidebar.is-collapsed .nav-row-name,
 .sidebar.is-collapsed .nav-row-meta {
   opacity: 0;
   overflow: hidden;
 }
 
-/* The icon column: keep the glyph centred in its 24px box in both states, so
-   the collapse moves the whole column rather than nudging the glyph inside it. */
-.nav-row > svg,
-.nav-row > .nav-icon {
-  justify-self: center;
-}
-
-/* The icon needs a positioning context for the collapsed count badge, and a
-   centred box so an 18px glyph sits true in its 24px column. */
-.nav-icon {
-  position: relative;
-  display: grid;
-  place-items: center;
-  width: 24px;
-}
-
-/* The footer folds as the rail narrows: with wrap on (see `.sidebar-foot`), the
-   buttons drop onto their own lines once the width can no longer hold them, so
-   the same width animation that moves the rail also restacks the footer — no
-   discrete `flex-direction` switch to pop. These are the collapsed overrides;
-   centred so the footer lines up with the nav icons above it. */
 .sidebar.is-collapsed .sidebar-foot {
   justify-content: center;
   padding: 12px 10px;

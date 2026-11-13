@@ -145,3 +145,100 @@
     </button>
   </div>
 </footer>
+
+<style>
+.player-bar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 24px;
+  min-height: 80px;
+  padding: 12px 32px;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  box-shadow: var(--shadow-raised);
+}
+
+.player-now-playing {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 16px;
+}
+
+.player-thumb {
+  display: grid;
+  width: 52px;
+  height: 52px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: var(--r-control);
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: 20px;
+}
+
+.player-meta {
+  min-width: 0;
+}
+
+.player-title {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.player-sub {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+.player-sub.is-error {
+  color: var(--mark);
+}
+
+.player-center {
+  display: flex;
+  width: min(28rem, 100%);
+  flex-direction: column;
+  justify-self: center;
+  gap: 8px;
+}
+
+.player-trailing {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.player-progress {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+
+.player-progress-track {
+  position: relative;
+  height: 4px;
+  flex: 1;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--track);
+}
+
+.player-progress-fill {
+  position: absolute;
+  inset-block: 0;
+  left: 0;
+  border-radius: 2px;
+  background: var(--accent);
+  transition: width var(--speed) var(--ease);
+}
+</style>

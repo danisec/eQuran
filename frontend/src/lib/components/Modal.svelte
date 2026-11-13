@@ -94,3 +94,34 @@
     </div>
   </div>
 {/if}
+
+<style>
+.settings-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.settings-backdrop {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  background: rgba(10, 18, 27, 0.56);
+  cursor: default;
+}
+
+.settings-dialog {
+  position: relative;
+  width: min(520px, 100%);
+  max-height: min(760px, 100%);
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--r-panel);
+  background: var(--surface);
+  padding: 24px;
+  box-shadow: var(--shadow-overlay);
+}
+</style>

@@ -118,3 +118,66 @@
     </button>
   </div>
 </aside>
+
+<style>
+.nav-row {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  width: 100%;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  height: 44px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--r-control);
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  /* The track widths and gap collapse to a single icon column when the rail
+     narrows, so they tween alongside the rail itself rather than snapping.
+     `justify-content: center` only bites once the tracks are narrower than the
+     row (the collapsed case); expanded, the 1fr track fills the row. */
+  transition:
+    background-color var(--speed-fast) var(--ease),
+    color var(--speed-fast) var(--ease),
+    grid-template-columns var(--speed) var(--ease),
+    column-gap var(--speed) var(--ease);
+}
+
+.nav-row:hover {
+  background: var(--surface);
+}
+
+.sidebar-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px 16px;
+  transition: padding var(--speed) var(--ease);
+}
+
+.sidebar-utils {
+  display: flex;
+  flex-wrap: wrap;
+  min-width: 0;
+  align-items: center;
+  gap: 4px;
+  transition: gap var(--speed) var(--ease);
+}
+
+.nav-row > .nav-icon {
+  justify-self: center;
+}
+
+.nav-icon {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 24px;
+}
+</style>

@@ -45,3 +45,56 @@
     </div>
   </div>
 {/if}
+
+<style>
+  /* Status notice: a quiet surface, not an amber warning card */
+  .voice-status {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--r-control);
+    background: var(--surface);
+  }
+  
+  .voice-status-icon {
+    display: grid;
+    width: 26px;
+    height: 26px;
+    flex: 0 0 auto;
+    place-items: center;
+    color: var(--text-muted);
+  }
+  
+  .voice-status-icon :global(svg) {
+    width: 18px;
+    height: 18px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.5;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .voice-status.is-ready .voice-status-icon {
+    color: var(--accent);
+  }
+  
+  .voice-status.is-failed .voice-status-icon {
+    color: var(--mark);
+  }
+  
+  .voice-status-title {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text);
+  }
+  
+  .voice-status-copy {
+    margin-top: 3px;
+    font-size: 12px;
+    line-height: 1.45;
+    color: var(--text-muted);
+  }
+</style>

@@ -77,3 +77,53 @@
     <TafsirPanel ayahNumber={ayah.nomorAyat} loading={tafsirLoading} />
   {/if}
 </article>
+
+<style>
+.verse-card {
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  background: var(--surface);
+  padding: 24px;
+  box-shadow: var(--shadow-card);
+  transition: border-color var(--speed) var(--ease), background-color var(--speed) var(--ease);
+}
+
+.verse-card:hover {
+  border-color: var(--border-strong);
+}
+
+.verse-arabic {
+  font-size: 34px;
+  line-height: 2;
+  color: var(--text);
+  text-align: right;
+}
+
+.verse-latin {
+  font-family: 'IBM Plex Serif', Georgia, serif;
+  font-size: 17px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.verse-translation {
+  font-size: 16px;
+  line-height: 1.65;
+  color: var(--text-secondary);
+}
+
+.verse-active-note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--accent);
+}
+
+.verse-active-note span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+</style>

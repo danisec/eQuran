@@ -50,3 +50,12 @@
     />
   </div>
 {/if}
+
+<style>
+.player-bar-layer {
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  z-index: 20;
+}
+</style>

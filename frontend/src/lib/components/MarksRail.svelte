@@ -109,3 +109,85 @@
     {/if}
   </div>
 </aside>
+
+<style>
+.marks-group-label {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding-top: 12px;
+  padding-bottom: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.mark-row {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  border-radius: var(--r-control);
+  transition: background-color var(--speed-fast) var(--ease);
+}
+
+.mark-row:hover {
+  background: var(--surface);
+}
+
+.mark-open {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 8px;
+  border: 0;
+  border-radius: var(--r-control);
+  background: transparent;
+  text-align: left;
+}
+
+.mark-ref {
+  display: block;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--accent);
+}
+
+.mark-arabic {
+  display: block;
+  margin-top: 4px;
+  font-size: 19px;
+  line-height: 1.7;
+  color: var(--text);
+}
+
+.mark-translation {
+  display: -webkit-box;
+  margin-top: 4px;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.mark-remove {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 28px;
+  height: 28px;
+  opacity: 0;
+  transition:
+    opacity var(--speed-fast) var(--ease),
+    background-color var(--speed-fast) var(--ease),
+    color var(--speed-fast) var(--ease);
+}
+
+.mark-remove:focus-visible {
+  opacity: 1;
+}
+</style>

@@ -77,3 +77,61 @@
     <p class="tafsir-status mt-2 text-[var(--mark)]">{tafsirState.error}</p>
   {/if}
 </section>
+
+<style>
+.tafsir-panel {
+  margin-top: 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  background: var(--raised);
+  padding: 20px;
+}
+
+.tafsir-title {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.tafsir-body {
+  font-size: 16px;
+  line-height: 1.7;
+  color: var(--text-secondary);
+}
+
+.tafsir-status {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.tafsir-voice-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  transition: background-color var(--speed-fast) var(--ease), color var(--speed-fast) var(--ease);
+}
+
+.tafsir-voice-button:hover {
+  background: var(--raised);
+  color: var(--text);
+}
+
+.tafsir-voice-button :global(svg) {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+}
+
+.tafsir-detail-badge {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+</style>
