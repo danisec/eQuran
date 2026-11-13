@@ -2,6 +2,18 @@
 
 /* ------------------------------------------------------------- sidebar --- */
 
+/* Row base lives here, not in Sidebar.svelte: the active and open states below
+   have the same specificity, so a component-scoped base would win on load
+   order and hide the accent pill. */
+.nav-row {
+  background: transparent;
+  color: var(--text);
+}
+
+.nav-row:not(.is-current):not(.is-open):hover {
+  background: var(--surface);
+}
+
 .nav-row.is-current {
   background: var(--accent);
   color: var(--on-accent);

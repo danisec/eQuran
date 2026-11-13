@@ -34,7 +34,7 @@
       title={collapsed ? t('nav.home') : undefined}
       onclick={showHome}
     >
-      <Icon name="home" />
+      <span class="nav-icon"><Icon name="home" /></span>
       <span class="nav-row-name">{t('nav.home')}</span>
       <span></span>
     </button>
@@ -46,7 +46,7 @@
       title={collapsed ? t('nav.read') : undefined}
       onclick={showReader}
     >
-      <Icon name="book" />
+      <span class="nav-icon"><Icon name="book" /></span>
       <span class="nav-row-name">{t('nav.read')}</span>
       <span></span>
     </button>
@@ -133,8 +133,6 @@
   padding: 0 10px;
   border: 0;
   border-radius: var(--r-control);
-  background: transparent;
-  color: var(--text);
   text-align: left;
   /* The track widths and gap collapse to a single icon column when the rail
      narrows, so they tween alongside the rail itself rather than snapping.
@@ -145,10 +143,6 @@
     color var(--speed-fast) var(--ease),
     grid-template-columns var(--speed) var(--ease),
     column-gap var(--speed) var(--ease);
-}
-
-.nav-row:hover {
-  background: var(--surface);
 }
 
 .sidebar-foot {
