@@ -1,4 +1,5 @@
 use equran_core::api::models::{EnglishSurah, Surah, SurahListItem, TafsirSurah};
+use equran_core::domain::Lang;
 use tauri::State;
 
 use crate::AppState;
@@ -34,10 +35,15 @@ pub async fn get_surah_english(
 }
 
 #[tauri::command]
-pub async fn get_tafsir(number: u8, state: State<'_, AppState>) -> Result<TafsirSurah, String> {
+pub async fn get_tafsir(
+    number: u8,
+    lang: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<TafsirSurah, String> {
+    let lang: Lang = lang.unwrap_or_else(|| "id".to_owned()).parse()?;
     state
         .api()
-        .fetch_tafsir(number)
+        .fetch_tafsir(number, lang)
         .await
         .map_err(|error| error.to_string())
 }

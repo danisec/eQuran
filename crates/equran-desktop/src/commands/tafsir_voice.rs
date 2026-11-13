@@ -13,6 +13,7 @@ use equran_core::audio::{
     player::{PlaybackControl, play_audio_controlled},
     tts::TtsEngine,
 };
+use equran_core::domain::Lang;
 use tauri::State;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
@@ -72,11 +73,13 @@ pub async fn play_tafsir_voice(
     surah_number: u8,
     ayah_number: u16,
     text: String,
+    lang: String,
 ) -> Result<(), String> {
     let text = text.trim().to_owned();
     if text.is_empty() {
         return Err("Tafsir text is empty".to_owned());
     }
+    let lang: Lang = lang.parse()?;
 
     ensure_tts_ready(&state)?;
 
@@ -108,6 +111,7 @@ pub async fn play_tafsir_voice(
     let result = play_tafsir_chunks(
         tts,
         chunks,
+        lang,
         surah_number,
         ayah_number,
         cancel_token,
@@ -130,6 +134,7 @@ pub async fn play_tafsir_voice(
 async fn play_tafsir_chunks(
     tts: TtsEngine,
     chunks: Vec<String>,
+    lang: Lang,
     surah_number: u8,
     ayah_number: u16,
     cancel_token: CancellationToken,
@@ -138,7 +143,7 @@ async fn play_tafsir_chunks(
     control: Arc<PlaybackControl>,
 ) -> Result<(), String> {
     let current_audio = tts
-        .synthesize_tafsir_chunk_cached(&chunks[0], surah_number, ayah_number, 1)
+        .synthesize_tafsir_chunk_cached(&chunks[0], lang, surah_number, ayah_number, 1)
         .await
         .map_err(|e| format!("Failed to generate tafsir voice: {e}"))?;
 
@@ -150,6 +155,7 @@ async fn play_tafsir_chunks(
         queued_audio.push_back(spawn_tafsir_chunk_synthesis(
             tts.clone(),
             chunks[next_chunk_index].clone(),
+            lang,
             surah_number,
             ayah_number,
             next_chunk_index + 1,
@@ -164,6 +170,7 @@ async fn play_tafsir_chunks(
             queued_audio.push_back(spawn_tafsir_chunk_synthesis(
                 tts.clone(),
                 chunks[next_chunk_index].clone(),
+                lang,
                 surah_number,
                 ayah_number,
                 next_chunk_index + 1,
@@ -197,12 +204,13 @@ async fn play_tafsir_chunks(
 fn spawn_tafsir_chunk_synthesis(
     tts: TtsEngine,
     chunk: String,
+    lang: Lang,
     surah_number: u8,
     ayah_number: u16,
     chunk_number: usize,
 ) -> JoinHandle<anyhow::Result<PathBuf>> {
     tokio::spawn(async move {
-        tts.synthesize_tafsir_chunk_cached(&chunk, surah_number, ayah_number, chunk_number)
+        tts.synthesize_tafsir_chunk_cached(&chunk, lang, surah_number, ayah_number, chunk_number)
             .await
     })
 }

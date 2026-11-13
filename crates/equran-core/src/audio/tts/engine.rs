@@ -106,19 +106,15 @@ impl TtsEngine {
     pub async fn synthesize_tafsir_chunk_cached(
         &self,
         text: &str,
+        lang: Lang,
         surah: u8,
         ayah: u16,
         chunk: usize,
     ) -> Result<PathBuf> {
         let target = self
-            .cache_path(tafsir_tts_chunk_filename(
-                Lang::Id.code(),
-                surah,
-                ayah,
-                chunk,
-            ))
+            .cache_path(tafsir_tts_chunk_filename(lang.code(), surah, ayah, chunk))
             .await?;
-        self.ensure_cached(text, Lang::Id, &target).await
+        self.ensure_cached(text, lang, &target).await
     }
 
     async fn cache_path(&self, filename: String) -> Result<PathBuf> {

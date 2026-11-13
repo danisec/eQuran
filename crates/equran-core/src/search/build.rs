@@ -8,6 +8,7 @@ use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
 
 use crate::api::client::ApiClient;
+use crate::domain::Lang;
 
 use super::entry::SearchEntry;
 use super::normalize::revelation_label;
@@ -26,7 +27,7 @@ async fn fetch_surah_entries(api: &ApiClient, number: u8) -> Result<Vec<SearchEn
     let revelation = revelation_label(&surah.tempat_turun);
 
     let english = api.fetch_surah_english(number).await.ok();
-    let tafsir = api.fetch_tafsir(number).await.ok();
+    let tafsir = api.fetch_tafsir(number, Lang::Id).await.ok();
 
     let english_map: HashMap<u16, String> = english
         .map(|surah| {

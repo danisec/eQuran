@@ -484,6 +484,7 @@ impl PlaybackEngine {
 
         let chunks = TtsEngine::split_tafsir_text(text);
         let tts = self.tts.clone();
+        let lang = request.lang;
         let surah_number = request.surah_number;
         let ayah_number = request.ayah.nomor_ayat;
 
@@ -491,8 +492,14 @@ impl PlaybackEngine {
             let mut paths = Vec::with_capacity(chunks.len());
             for (index, chunk) in chunks.iter().enumerate() {
                 paths.push(
-                    tts.synthesize_tafsir_chunk_cached(chunk, surah_number, ayah_number, index + 1)
-                        .await?,
+                    tts.synthesize_tafsir_chunk_cached(
+                        chunk,
+                        lang,
+                        surah_number,
+                        ayah_number,
+                        index + 1,
+                    )
+                    .await?,
                 );
             }
             Ok(paths)

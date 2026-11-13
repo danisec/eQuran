@@ -90,6 +90,64 @@ pub struct TafsirAyah {
     pub teks: String,
 }
 
+/// Envelope used by UmmahAPI, which reports failures with `success: false`
+/// instead of the `code`/`message` pair from equran.id.
+#[derive(Debug, Deserialize)]
+pub struct UmmahApiResponse<T> {
+    pub success: bool,
+    pub data: T,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UmmahTafsirSurah {
+    pub surah: u8,
+    pub tafsir: UmmahTafsirInfo,
+    /// Number of ayahs covered by this tafsir. Not every surah is complete.
+    pub total_verses: u16,
+    pub verses: Vec<UmmahTafsirVerse>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UmmahTafsirInfo {
+    pub name: String,
+    pub author: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UmmahTafsirVerse {
+    pub ayah: u16,
+    pub text: String,
+}
+
+impl From<UmmahTafsirSurah> for TafsirSurah {
+    fn from(value: UmmahTafsirSurah) -> Self {
+        let tafsir = value
+            .verses
+            .into_iter()
+            .filter_map(|verse| {
+                let teks = verse.text.trim();
+                (!teks.is_empty()).then(|| TafsirAyah {
+                    ayat: verse.ayah,
+                    teks: teks.to_owned(),
+                })
+            })
+            .collect();
+
+        Self {
+            nomor: value.surah,
+            // UmmahAPI only returns commentary, so the surah metadata is left
+            // empty; the desktop UI already has it from the Quran response.
+            nama: String::new(),
+            nama_latin: String::new(),
+            jumlah_ayat: 0,
+            tempat_turun: String::new(),
+            arti: String::new(),
+            deskripsi: format!("{} — {}", value.tafsir.name, value.tafsir.author),
+            tafsir,
+        }
+    }
+}
+
 #[derive(Debug, Deserialize)]
 pub struct QuranApiIdSurah {
     pub number: u8,
@@ -187,7 +245,7 @@ impl EnglishSurah {
 
 #[cfg(test)]
 mod tests {
-    use super::{ApiResponse, QuranApiIdSurah, TafsirSurah};
+    use super::{ApiResponse, QuranApiIdSurah, TafsirSurah, UmmahApiResponse, UmmahTafsirSurah};
 
     #[test]
     fn parses_tafsir_response() {
@@ -254,5 +312,38 @@ mod tests {
         assert_eq!(mapped.tafsir[0].ayat, 1);
         assert_eq!(mapped.tafsir[0].teks, "Tafsir panjang");
         assert_eq!(mapped.tafsir[1].teks, "Fallback pendek");
+    }
+
+    #[test]
+    fn maps_ummah_english_tafsir_response() {
+        let json = r#"{
+            "success": true,
+            "service": "tafsir-surah",
+            "data": {
+                "surah": 112,
+                "tafsir": {
+                    "key": "maarif",
+                    "name": "Ma'arif al-Qur'an",
+                    "language": "english",
+                    "author": "Mufti Muhammad Shafi"
+                },
+                "total_verses": 2,
+                "verses": [
+                    { "verse_key": "112:1", "ayah": 1, "text": "  English tafsir one  " },
+                    { "verse_key": "112:2", "ayah": 2, "text": "   " }
+                ]
+            }
+        }"#;
+
+        let parsed: UmmahApiResponse<UmmahTafsirSurah> =
+            serde_json::from_str(json).expect("ummah response should parse");
+        assert!(parsed.success);
+
+        let mapped: TafsirSurah = parsed.data.into();
+        assert_eq!(mapped.nomor, 112);
+        assert_eq!(mapped.deskripsi, "Ma'arif al-Qur'an — Mufti Muhammad Shafi");
+        assert_eq!(mapped.tafsir.len(), 1, "empty commentary is dropped");
+        assert_eq!(mapped.tafsir[0].ayat, 1);
+        assert_eq!(mapped.tafsir[0].teks, "English tafsir one");
     }
 }
