@@ -191,7 +191,8 @@ equran-cli play --help
 
 ## Data Sources
 
-- Arabic Audio, Tafsir: [EQuran.id](https://equran.id)
+- Arabic Audio, Tafsir Indonesia: [EQuran.id](https://equran.id)
+- Tafsir Inggris: [UmmahAPI](https://ummahapi.com)
 - TTS Indonesia: [TTS Indonesia Gratis](https://github.com/drat/TTS-Indonesia-Gratis)
 
 ---

@@ -131,12 +131,20 @@ di-cache per interpreter agar tidak dijalankan berulang kali.
 ### English
 
 Supertonic 3 multilingual, voice yang sama dengan Bahasa Indonesia.
-Teks yang dibacakan untuk `lang = en` adalah **tafsir** ayat (dari
-`quran-api-id.vercel.app`), bukan terjemahan satu kalimat dari API English.
-Tafsir diambil sekali per surah saat playback dimulai; jika gagal, engine jatuh
-ke `textEnglish` dari `equran.id/api/en`. Cache TTS English memakai nama file
-`supertonic_en_*.wav` yang sama seperti sebelumnya, jadi cache lama tetap valid
-untuk fallback.
+Teks yang dibacakan untuk `lang = en` adalah **tafsir Inggris** ayat dari
+[UmmahAPI](https://ummahapi.com/api/docs) (sumber `maarif`), bukan terjemahan
+satu kalimat dari API English. Tafsir diambil sekali per surah saat playback
+dimulai; jika gagal, engine jatuh ke `textEnglish` dari `equran.id/api/en`.
+Panel tafsir memakai sumber yang sama saat bahasa antarmuka Inggris, sedangkan
+bahasa Indonesia tetap memakai `quran-api-id.vercel.app`.
+
+Endpoint tafsir UmmahAPI bisa dipakai tanpa kunci. Untuk kuota/atribusi
+pribadi, set `UMMAH_API_KEY` di environment aplikasi; nilainya tidak pernah
+disimpan di repository.
+
+Cache TTS tafsir memakai kode bahasa, mis. `tafsir_supertonic_en_*.wav`, jadi
+narasi Inggris dan Indonesia tidak saling menimpa. Cache TTS English ayat tetap
+memakai nama `supertonic_en_*.wav` seperti sebelumnya.
 
 ## Cache System
 
@@ -147,7 +155,8 @@ untuk fallback.
 ├── audio/          # MP3 qari dari EQuran.id
 └── tts/            # TTS output
     ├── supertonic_id_001_001.wav
-    └── tafsir_supertonic_id_001_001_001.wav
+    ├── tafsir_supertonic_id_001_001_001.wav
+    └── tafsir_supertonic_en_001_001_001.wav
 ```
 
 File TTS ditulis ke file `.part` unik lalu di-rename secara atomik, sehingga
