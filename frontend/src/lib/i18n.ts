@@ -3,6 +3,7 @@
  * One dictionary per locale, no runtime library — the surface is small enough
  * that a plain lookup with a typed key list stays readable and cannot drift.
  */
+import { SURAH_META_EN } from '$lib/data/surahMeta';
 import { playbackState } from '$lib/stores/playback.svelte';
 
 export type Locale = 'id' | 'en';
@@ -33,7 +34,17 @@ const id: Dictionary = {
   'settings.open': 'Buka pengaturan',
   'settings.close': 'Tutup pengaturan',
   'settings.qari': 'Qari',
+  'settings.qari.misyari': 'Bacaan seimbang',
+  'settings.qari.sudais': 'Imam Makkah',
+  'settings.qari.dossari': 'Irama jelas',
+  'settings.qari.juhany': 'Qari Masjidil Haram',
+  'settings.qari.qasim': 'Imam Madinah',
+  'settings.qari.yasser': 'Suara hangat',
   'settings.language': 'Bahasa terjemahan',
+  'settings.lang.id': 'Bahasa Indonesia',
+  'settings.lang.idHint': 'Terjemahan Indonesia',
+  'settings.lang.en': 'English',
+  'settings.lang.enHint': 'Terjemahan bahasa Inggris',
   'settings.voice': 'Suara terjemahan',
   'settings.voiceChecking': 'Memeriksa Supertonic 3…',
   'settings.voiceReady': 'Supertonic 3 siap membacakan terjemahan',
@@ -76,6 +87,7 @@ const id: Dictionary = {
   'ayah.play': 'Putar ayat %s',
   'ayah.bookmark': 'Tandai ayat %s',
   'ayah.copy': 'Salin ayat %s',
+  'ayah.copyRef': 'Surah %s ayat %s',
   'ayah.tafsir': 'Tafsir',
   'ayah.tafsirTitle': 'Tafsir ayat %s',
   'ayah.tafsirLoading': 'Memuat tafsir…',
@@ -106,7 +118,9 @@ const id: Dictionary = {
   'home.resultOpen': 'Buka',
   'home.resultPlay': 'Putar',
   'home.indexBuilding': 'Menyiapkan indeks %s/%s',
-  'home.hint': 'Coba cari: sabar, rezeki, orang tua, atau kutipan Arab',
+
+  'surah.meccan': 'Makkiyah',
+  'surah.medinan': 'Madaniyah',
 
   'focus.close': 'Tutup mode fokus',
   'focus.enter': 'Mode fokus',
@@ -140,7 +154,17 @@ const en: Dictionary = {
   'settings.open': 'Open settings',
   'settings.close': 'Close settings',
   'settings.qari': 'Reciter',
+  'settings.qari.misyari': 'Balanced recitation',
+  'settings.qari.sudais': 'Makkah imam',
+  'settings.qari.dossari': 'Clear cadence',
+  'settings.qari.juhany': 'Haram reciter',
+  'settings.qari.qasim': 'Madinah imam',
+  'settings.qari.yasser': 'Warm tone',
   'settings.language': 'Translation language',
+  'settings.lang.id': 'Bahasa Indonesia',
+  'settings.lang.idHint': 'Indonesian translation',
+  'settings.lang.en': 'English',
+  'settings.lang.enHint': 'English translation',
   'settings.voice': 'Translation voice',
   'settings.voiceChecking': 'Checking Supertonic 3…',
   'settings.voiceReady': 'Supertonic 3 is ready to read translations',
@@ -183,6 +207,7 @@ const en: Dictionary = {
   'ayah.play': 'Play verse %s',
   'ayah.bookmark': 'Mark verse %s',
   'ayah.copy': 'Copy verse %s',
+  'ayah.copyRef': 'Surah %s, verse %s',
   'ayah.tafsir': 'Tafsir',
   'ayah.tafsirTitle': 'Tafsir of verse %s',
   'ayah.tafsirLoading': 'Loading tafsir…',
@@ -198,8 +223,8 @@ const en: Dictionary = {
   'ayah.paused': 'Paused',
 
   'home.title': 'The Quran',
-  'home.subtitle': 'Search verses, topics or tafsir — then open or play',
-  'home.search': 'Search surahs, verses, topics or tafsir',
+  'home.subtitle': 'Search verses, surahs and topics — then open or play',
+  'home.search': 'Search surahs, verses or an Arabic phrase',
   'home.surahResults': 'Surahs',
   'home.surahIndex': 'Surah index',
   'home.continue': 'Continue reading',
@@ -208,12 +233,14 @@ const en: Dictionary = {
   'home.statBookmarks': 'verses marked',
   'home.searching': 'Loading the index…',
   'home.noResults': 'No verse matches',
-  'home.noResultsHint': 'Try another word, or search a topic through the tafsir',
+  'home.noResultsHint': 'Try another word, or a surah name',
   'home.results': '%s verses',
   'home.resultOpen': 'Open',
   'home.resultPlay': 'Play',
   'home.indexBuilding': 'Preparing the index %s/%s',
-  'home.hint': 'Try: patience, provision, parents, or an Arabic quote',
+
+  'surah.meccan': 'Meccan',
+  'surah.medinan': 'Medinan',
 
   'focus.close': 'Close focus mode',
   'focus.enter': 'Focus mode',
@@ -232,13 +259,51 @@ export function locale(): Locale {
 
 /**
  * Translate a key for the active locale. `%s` placeholders are filled from
- * `values` in order. A missing key falls back to Indonesian, then to the key
- * itself, so a forgotten string is visible rather than blank.
+ * `values` in order.
+ *
+ * A missing key logs a warning in development, then falls back to Indonesian
+ * and finally to the key itself, so drift is visible while a reader never sees
+ * a raw identifier.
  */
 export function t(key: string, ...values: Array<string | number>): string {
   const current = locale();
-  const template = dictionaries[current][key] ?? dictionaries.id[key] ?? key;
+  let template = dictionaries[current][key];
+  if (template === undefined) {
+    if (import.meta.env.DEV) {
+      console.warn(`[i18n] missing "${key}" for locale "${current}"`);
+    }
+    template = dictionaries.id[key] ?? key;
+  }
   if (values.length === 0) return template;
   let index = 0;
   return template.replace(/%s/g, () => String(values[index++]));
+}
+
+/**
+ * Meaning of a surah name in the active language. Indonesian comes from the
+ * API; English comes from the static table because the API only translates
+ * verse text, not surah metadata.
+ */
+export function surahMeaning(nomor: number, indonesian: string): string {
+  if (locale() === 'en') return SURAH_META_EN[nomor]?.meaning ?? indonesian;
+  return indonesian;
+}
+
+/** Revelation place as the reader's language names it: Makkiyah/Meccan. */
+export function revelationLabel(place: string): string {
+  return t(place.toLowerCase().includes('madin') ? 'surah.medinan' : 'surah.meccan');
+}
+
+/** One number format across the interface, matching the active language. */
+export function formatNumber(value: number): string {
+  return value.toLocaleString(locale() === 'en' ? 'en-US' : 'id-ID');
+}
+
+/**
+ * Keep the document language in step with the translation, so assistive tech,
+ * spellcheck and hyphenation all read the same language as the screen.
+ */
+export function syncDocumentLang(): void {
+  if (typeof document === 'undefined') return;
+  document.documentElement.lang = locale();
 }

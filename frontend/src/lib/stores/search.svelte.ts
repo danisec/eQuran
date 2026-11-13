@@ -8,6 +8,8 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 
+import { locale, type Locale } from '$lib/i18n';
+
 export type SearchHit = {
   surah: number;
   ayah: number;
@@ -29,17 +31,20 @@ type IndexProgress = {
   total: number;
 };
 
-/** Topic chips, each one a query the tafsir answers well. */
-export const TOPIC_QUERIES = [
-  'sabar',
-  'syukur',
-  'rezeki',
-  'orang tua',
-  'amanah',
-  'taubat',
-  'sedekah',
-  'ilmu'
-] as const;
+/**
+ * Topic chips, each one a query the index answers well. The chip is a promise:
+ * it must be a term the active translation actually contains, so English chips
+ * search the English field and Indonesian chips the Indonesian one.
+ */
+const TOPIC_QUERIES: Record<Locale, readonly string[]> = {
+  id: ['sabar', 'syukur', 'rezeki', 'orang tua', 'amanah', 'taubat', 'sedekah', 'ilmu'],
+  en: ['patience', 'gratitude', 'provision', 'parents', 'trust', 'repentance', 'charity', 'knowledge']
+};
+
+/** Topic chips for the language the reader chose. */
+export function topicQueries(): readonly string[] {
+  return TOPIC_QUERIES[locale()];
+}
 
 export const searchState = $state({
   query: '',
@@ -102,7 +107,13 @@ export async function runSearch(query: string, limit = 40) {
   searchState.building = searchState.indexedAyah === 0;
 
   try {
-    const hits = await invoke<SearchHit[]>('search_quran', { query: trimmed, limit });
+    // The language decides which index fields count, so an English query never
+    // matches Indonesian tafsir text.
+    const hits = await invoke<SearchHit[]>('search_quran', {
+      query: trimmed,
+      limit,
+      lang: locale()
+    });
     searchState.hits = hits;
     searchState.hasSearched = true;
     // The first successful query is also the moment the index becomes real,

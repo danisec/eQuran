@@ -241,3 +241,46 @@ async fn save_and_load_round_trip_on_disk() {
             .is_none()
     );
 }
+
+#[test]
+fn english_search_ignores_indonesian_fields() {
+    let index = index_from(vec![entry(
+        1,
+        1,
+        "Dengan nama Allah",
+        "بسم الله",
+        "Bismillah",
+        Some("In the name of Allah"),
+        Some("Tafsir menyebut sabar dan syukur"),
+    )]);
+
+    // "sabar" only exists in the Indonesian tafsir: invisible in English mode.
+    assert!(
+        index
+            .search_for("sabar", 10, crate::domain::Lang::En)
+            .is_empty()
+    );
+    assert_eq!(
+        index.search_for("sabar", 10, crate::domain::Lang::Id).len(),
+        1
+    );
+
+    // "dengan" only exists in the Indonesian translation.
+    assert!(
+        index
+            .search_for("dengan", 10, crate::domain::Lang::En)
+            .is_empty()
+    );
+    assert_eq!(
+        index
+            .search_for("dengan", 10, crate::domain::Lang::Id)
+            .len(),
+        1
+    );
+
+    // An English query quotes the English translation, never the tafsir.
+    let hits = index.search_for("name", 10, crate::domain::Lang::En);
+    assert_eq!(hits.len(), 1);
+    assert_eq!(hits[0].matched_field, "english");
+    assert!(hits[0].snippet.to_lowercase().contains("name"));
+}

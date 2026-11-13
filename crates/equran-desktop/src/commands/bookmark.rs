@@ -15,6 +15,10 @@ pub struct Bookmark {
     /// own in the marks rail. Absent on marks made before this field existed.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub translation: Option<String>,
+    /// Language of `translation`, so a mark never shows Indonesian text while
+    /// the interface speaks English. Absent on marks made before this field.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lang: Option<String>,
 }
 
 pub struct BookmarkState {
@@ -79,6 +83,7 @@ pub async fn add_bookmark(
     surah_name: String,
     ayah_text: String,
     translation: Option<String>,
+    lang: Option<String>,
 ) -> Result<Vec<Bookmark>, String> {
     let mut bookmarks = state.bookmarks.lock().await;
     let already_exists = bookmarks.iter().any(|b| b.surah == surah && b.ayah == ayah);
@@ -89,6 +94,7 @@ pub async fn add_bookmark(
             surah_name,
             ayah_text,
             translation,
+            lang,
         });
     }
     drop(bookmarks);
@@ -129,6 +135,7 @@ mod tests {
             surah_name: "Al-Baqarah".to_owned(),
             ayah_text: "Ayatul Kursi".to_owned(),
             translation: Some("Ayat Kursi".to_owned()),
+            lang: Some("id".to_owned()),
         });
         assert_eq!(bookmarks.len(), 1);
 

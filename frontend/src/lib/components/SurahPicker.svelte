@@ -6,6 +6,7 @@
   import { onMount } from 'svelte';
   import Icon from '$lib/components/Icon.svelte';
   import { t } from '$lib/i18n';
+  import { SURAH_META_EN } from '$lib/data/surahMeta';
   import { loadSurahList, selectSurah, surahState } from '$lib/stores/surah.svelte';
 
   let open = $state(false);
@@ -21,9 +22,12 @@
     const needle = `${query}`.trim().toLowerCase();
     const list = surahState.list;
     if (needle === '') return list;
-    return list.filter((surah) =>
-      `${surah.nomor} ${surah.namaLatin} ${surah.arti}`.toLowerCase().includes(needle)
-    );
+    return list.filter((surah) => {
+      const meaning = SURAH_META_EN[surah.nomor]?.meaning ?? '';
+      return `${surah.nomor} ${surah.namaLatin} ${surah.arti} ${meaning}`
+        .toLowerCase()
+        .includes(needle);
+    });
   });
 
   function toggle() {

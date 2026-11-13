@@ -44,7 +44,7 @@
 
   async function copyAyah() {
     const text = [
-      `Surah ${surahState.selected.namaLatin} ayat ${ayah.nomorAyat}`,
+      t('ayah.copyRef', surahState.selected.namaLatin, ayah.nomorAyat),
       ayah.teksArab,
       ayah.teksLatin,
       translation
@@ -96,7 +96,8 @@
       ayah.nomorAyat,
       surahState.selected.namaLatin,
       snippet(ayah.teksArab),
-      translation
+      translation,
+      playbackState.lang
     )}
 >
   <Icon name={isBookmarked ? 'bookmark-filled' : 'bookmark'} filled={isBookmarked} />

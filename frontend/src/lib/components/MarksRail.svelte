@@ -88,7 +88,7 @@
                     {t('marks.ref', mark.surahName, mark.surah, mark.ayah)}
                   </span>
                   <span class="arabic mark-arabic">{mark.ayahText}</span>
-                  {#if mark.translation}
+                  {#if mark.translation && (!mark.lang || mark.lang === playbackState.lang)}
                     <span class="mark-translation">{mark.translation}</span>
                   {/if}
                 </span>

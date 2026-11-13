@@ -1,6 +1,7 @@
 <script lang="ts">
   import '../app.css';
   import { onMount, onDestroy } from 'svelte';
+  import { syncDocumentLang } from '$lib/i18n';
   import { handleGlobalKeydown } from '$lib/shortcuts';
   import {
     destroyPlaybackListeners,
@@ -14,6 +15,12 @@
   import { initView } from '$lib/stores/view.svelte';
 
   let { children } = $props();
+
+  // The document language follows the translation setting, so screen readers,
+  // spellcheck and hyphenation match what is on screen.
+  $effect(() => {
+    syncDocumentLang();
+  });
 
   onMount(() => {
     initTheme();

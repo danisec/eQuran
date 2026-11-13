@@ -2,7 +2,7 @@
   import Icon from '$lib/components/Icon.svelte';
   import PlayerBar from '$lib/components/PlayerBar.svelte';
   import VerseRosette from '$lib/components/VerseRosette.svelte';
-  import { t } from '$lib/i18n';
+  import { revelationLabel, t } from '$lib/i18n';
   import { disableFocusMode, focusState, setFocusAyah } from '$lib/stores/focus.svelte';
   import { endPlayback, nextAyah, playbackState, playFromAyah, prevAyah, togglePlayback, toggleRepeat } from '$lib/stores/playback.svelte';
   import { surahState } from '$lib/stores/surah.svelte';
@@ -76,7 +76,7 @@
       <div>
         <h1 class="text-[22px] font-medium text-[var(--text)]">{surahState.selected.namaLatin}</h1>
         <p class="mt-1 text-[13px] text-[var(--text-muted)]">
-          {surahState.selected.tempatTurun === 'Madinah' ? 'Madaniyah' : 'Makkiyah'} · {surahState.selected.jumlahAyat} {t('play.ayahCount')}
+          {revelationLabel(surahState.selected.tempatTurun)} · {surahState.selected.jumlahAyat} {t('play.ayahCount')}
         </p>
       </div>
     </div>

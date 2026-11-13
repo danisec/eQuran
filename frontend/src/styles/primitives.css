@@ -137,6 +137,7 @@
   font-size: 11px;
   line-height: 16px;
   text-align: center;
+  white-space: nowrap;
 }
 
 /* The verse rosette: one shape, three sizes, the product's signature */

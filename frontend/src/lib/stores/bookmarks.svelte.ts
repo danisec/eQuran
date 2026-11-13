@@ -10,6 +10,11 @@ export type Bookmark = {
    * own in the rail without refetching the surah. Older marks have none.
    */
   translation?: string;
+  /**
+   * Language of `translation`. The rail hides a mark's translation when it no
+   * longer matches the interface language, rather than showing the wrong one.
+   */
+  lang?: string;
 };
 
 export type BookmarkGroup = {
@@ -70,7 +75,8 @@ export async function addBookmark(
   ayah: number,
   surahName: string,
   ayahText: string,
-  translation?: string
+  translation?: string,
+  lang?: string
 ) {
   try {
     bookmarkState.list = await invoke<Bookmark[]>('add_bookmark', {
@@ -78,7 +84,8 @@ export async function addBookmark(
       ayah,
       surahName,
       ayahText,
-      translation
+      translation,
+      lang
     });
   } catch {
     // silently fail
@@ -102,11 +109,12 @@ export async function toggleBookmark(
   ayah: number,
   surahName: string,
   ayahText: string,
-  translation?: string
+  translation?: string,
+  lang?: string
 ) {
   if (isBookmarked(surah, ayah)) {
     await removeBookmark(surah, ayah);
   } else {
-    await addBookmark(surah, ayah, surahName, ayahText, translation);
+    await addBookmark(surah, ayah, surahName, ayahText, translation, lang);
   }
 }

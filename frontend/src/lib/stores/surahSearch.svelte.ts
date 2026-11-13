@@ -6,6 +6,7 @@
  * verse index is asked in parallel. Both lists are shown together so "Al-Kahf"
  * opens the surah instead of listing verses that merely mention it.
  */
+import { SURAH_META_EN } from '$lib/data/surahMeta';
 import { surahState } from './surah.svelte';
 
 export type SurahMatch = {
@@ -38,8 +39,9 @@ function foldArabic(text: string): string {
 
 /**
  * Returns the surahs whose number, Latin name, Arabic name, meaning, or
- * revelation place contains the query. Exact number and prefix matches rank
- * first; the rest keep canonical order.
+ * revelation place contains the query. Both language meanings are matched, so
+ * "sapi" and "cow" both find Al-Baqarah whichever language the reader is in.
+ * Exact number and prefix matches rank first; the rest keep canonical order.
  */
 export function matchSurahs(query: string, limit = 6): SurahMatch[] {
   return matchSurahList(surahState.list, query, limit);
@@ -68,6 +70,9 @@ export function matchSurahList(list: SurahMatch[], query: string, limit = 6): Su
     .map((surah) => {
       const latin = fold(surah.namaLatin);
       const arti = fold(surah.arti);
+      const meta = SURAH_META_EN[surah.nomor];
+      const meaningEn = meta ? fold(meta.meaning) : '';
+      const revelationEn = meta ? meta.revelation.toLowerCase() : '';
       const arabic = foldArabic(surah.nama);
       let score = 0;
 
@@ -75,9 +80,9 @@ export function matchSurahList(list: SurahMatch[], query: string, limit = 6): Su
       else if (latin === plain) score = 90;
       else if (latin.startsWith(plain)) score = 70;
       else if (latin.includes(plain)) score = 50;
-      else if (arti.includes(plain)) score = 30;
+      else if (arti.includes(plain) || meaningEn.includes(plain)) score = 30;
       else if (arabicQuery.length > 0 && arabic.includes(arabicQuery)) score = 40;
-      else if (fold(surah.tempatTurun).includes(plain)) score = 10;
+      else if (fold(surah.tempatTurun).includes(plain) || revelationEn.includes(plain)) score = 10;
 
       return { surah, score };
     })

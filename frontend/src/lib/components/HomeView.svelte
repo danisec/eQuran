@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import Icon from '$lib/components/Icon.svelte';
   import { highlightSegments } from '$lib/highlight';
-  import { t } from '$lib/i18n';
+  import { formatNumber, locale, revelationLabel, surahMeaning, t } from '$lib/i18n';
   import { bookmarkState, loadBookmarks } from '$lib/stores/bookmarks.svelte';
   import { playFromAyah, playbackState } from '$lib/stores/playback.svelte';
   import {
@@ -13,7 +13,7 @@
     scheduleSearch,
     searchState,
     searchTopic,
-    TOPIC_QUERIES
+    topicQueries
   } from '$lib/stores/search.svelte';
   import { loadLastSurah, loadSurahList, selectSurah, selectSurahAyah, surahState } from '$lib/stores/surah.svelte';
   import { allSurahs, matchSurahs } from '$lib/stores/surahSearch.svelte';
@@ -23,6 +23,23 @@
   let searchInput = $state<HTMLInputElement | undefined>(undefined);
   let surahMatches = $derived(matchSurahs(searchState.query));
   let searched = $derived(searchState.hasSearched || searchState.hits.length > 0 || surahMatches.length > 0);
+
+  // The shortcut is Cmd+K on macOS and Ctrl+K elsewhere; the keycap must say
+  // the same thing the keybinding does.
+  const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
+  const shortcutKey = isMac ? '⌘ K' : 'Ctrl K';
+
+  // A language switch changes which index fields search can see, so the visible
+  // results are re-run instead of staying in the previous language.
+  let resultsLocale = $state(locale());
+  $effect(() => {
+    const current = locale();
+    if (current === resultsLocale) return;
+    resultsLocale = current;
+    if (searchState.hasSearched && searchState.query.trim().length >= 2) {
+      void runSearch(searchState.query);
+    }
+  });
 
   onMount(() => {
     void initSearchListeners();
@@ -108,12 +125,19 @@
           placeholder={t('home.search')}
           aria-label={t('home.search')}
         />
-        <span class="keycap">⌘K</span>
+        <span class="keycap">{shortcutKey}</span>
       </div>
 
       <div class="chip-row mt-4">
-        {#each TOPIC_QUERIES as topic}
-          <button class="chip" type="button" onclick={() => searchTopic(topic)}>{topic}</button>
+        {#each topicQueries() as topic}
+          <button
+            class="chip"
+            class:is-active={searchState.query.trim() === topic}
+            type="button"
+            onclick={() => searchTopic(topic)}
+          >
+            {topic}
+          </button>
         {/each}
       </div>
     </header>
@@ -128,7 +152,7 @@
               <span class="nav-row-index">{String(surah.nomor).padStart(3, '0')}</span>
               <span class="min-w-0 flex-1">
                 <span class="surah-tile-name">{surah.namaLatin}</span>
-                <span class="meta mt-1 block">{surah.arti} · {surah.jumlahAyat} {t('play.ayahCount')}</span>
+                <span class="meta mt-1 block">{surahMeaning(surah.nomor, surah.arti)} · {surah.jumlahAyat} {t('play.ayahCount')}</span>
               </span>
               <span class="surah-tile-arabic arabic">{surah.nama}</span>
             </button>
@@ -154,7 +178,7 @@
         </div>
       {:else if searchState.hits.length > 0}
         <div class="mb-3 flex items-baseline justify-between">
-          <h2 class="section-label">{t('home.results', searchState.hits.length)}</h2>
+          <h2 class="section-label" aria-live="polite">{t('home.results', searchState.hits.length)}</h2>
           <button class="button is-quiet" type="button" onclick={clearSearch}>
             <Icon name="close" size={14} />
             {t('common.clear')}
@@ -201,10 +225,9 @@
                 {surahState.selected.namaLatin}
               </span>
               <span class="meta mt-1 block">
-                {surahState.selected.jumlahAyat} {t('play.ayahCount')} · {surahState.selected.tempatTurun ===
-                'Madinah'
-                  ? 'Madaniyah'
-                  : 'Makkiyah'}
+                {surahMeaning(surahState.selected.nomor, surahState.selected.arti)} ·
+                {surahState.selected.jumlahAyat}
+                {t('play.ayahCount')} · {revelationLabel(surahState.selected.tempatTurun)}
               </span>
             </span>
             <Icon name="arrow-right" size={20} />
@@ -219,7 +242,7 @@
               <span class="min-w-0">
                 <span class="section-label">{t('home.lastBookmark')}</span>
                 <span class="mt-2 block text-[15px] font-medium text-[var(--text)]">
-                  {lastBookmark.surahName} : {lastBookmark.ayah}
+                  {t('marks.ref', lastBookmark.surahName, lastBookmark.surah, lastBookmark.ayah)}
                 </span>
                 <span class="arabic mt-1 block truncate text-[17px] text-[var(--text-secondary)]">
                   {lastBookmark.ayahText}
@@ -238,17 +261,21 @@
           {/if}
         </div>
 
-        <p class="meta mt-4 flex flex-wrap items-center gap-x-2 gap-y-1">
-          <span class="tnum">
-            {searchState.indexedAyah > 0 ? searchState.indexedAyah.toLocaleString('id-ID') : '—'}
-          </span>
-          <span>{t('home.statAyah')}</span>
-          <span aria-hidden="true">·</span>
-          <span class="tnum">{totalBookmarks}</span>
-          <span>{t('home.statBookmarks')}</span>
-          <span aria-hidden="true">·</span>
-          <span>{t('home.hint')}</span>
-        </p>
+        {#if searchState.indexedAyah > 0 || totalBookmarks > 0}
+          <p class="meta mt-4 flex flex-wrap items-center gap-x-2 gap-y-1">
+            {#if searchState.indexedAyah > 0}
+              <span class="tnum">{formatNumber(searchState.indexedAyah)}</span>
+              <span>{t('home.statAyah')}</span>
+            {/if}
+            {#if searchState.indexedAyah > 0 && totalBookmarks > 0}
+              <span aria-hidden="true">·</span>
+            {/if}
+            {#if totalBookmarks > 0}
+              <span class="tnum">{formatNumber(totalBookmarks)}</span>
+              <span>{t('home.statBookmarks')}</span>
+            {/if}
+          </p>
+        {/if}
 
         <!-- The index of the book: 114 surahs, the thing a mushaf opens with -->
         <h2 class="section-label mb-3 mt-8">{t('home.surahIndex')}</h2>
@@ -262,7 +289,7 @@
               <span class="nav-row-index">{String(surah.nomor).padStart(3, '0')}</span>
               <span class="min-w-0 flex-1">
                 <span class="surah-tile-name">{surah.namaLatin}</span>
-                <span class="meta mt-1 block">{surah.arti} · {surah.jumlahAyat} {t('play.ayahCount')}</span>
+                <span class="meta mt-1 block">{surahMeaning(surah.nomor, surah.arti)} · {surah.jumlahAyat} {t('play.ayahCount')}</span>
               </span>
               <span class="surah-tile-arabic arabic">{surah.nama}</span>
             </button>
@@ -322,18 +349,25 @@
 }
 
 .chip {
-  height: 30px;
+  height: 32px;
   padding: 0 12px;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--surface);
   color: var(--text-secondary);
   font-size: 13px;
-  transition: border-color var(--speed-fast) var(--ease), color var(--speed-fast) var(--ease);
+  transition: border-color var(--speed-fast) var(--ease), color var(--speed-fast) var(--ease),
+    background-color var(--speed-fast) var(--ease);
 }
 
 .chip:hover {
   border-color: var(--accent);
+  color: var(--accent);
+}
+
+.chip.is-active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
   color: var(--accent);
 }
 

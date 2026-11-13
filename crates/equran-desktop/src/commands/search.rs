@@ -7,6 +7,7 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
+use equran_core::domain::Lang;
 use equran_core::search::{SearchHit, SearchIndex};
 use serde::Serialize;
 use tauri::{Emitter, State, Window};
@@ -124,18 +125,23 @@ async fn ensure_index(
 }
 
 /// Searches the Quran, building the index on first use when necessary.
+///
+/// `lang` decides which fields are searchable: the English mode never matches
+/// or quotes the Indonesian tafsir.
 #[tauri::command]
 pub async fn search_quran(
     state: State<'_, AppState>,
     search: State<'_, SearchState>,
     query: String,
     limit: Option<usize>,
+    lang: Option<String>,
 ) -> Result<Vec<SearchHit>, String> {
     let limit = limit.unwrap_or(50);
+    let lang: Lang = lang.unwrap_or_else(|| "id".to_owned()).parse()?;
     let index = ensure_index(state.api(), &search, false, |_, _| {})
         .await
         .map_err(|error| error.to_string())?;
-    Ok(index.search(&query, limit))
+    Ok(index.search_for(&query, limit, lang))
 }
 
 /// Reports whether the search index is ready, how large it is, and whether a

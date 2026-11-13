@@ -1,7 +1,7 @@
 <script lang="ts">
   import Icon from '$lib/components/Icon.svelte';
   import SurahPicker from './SurahPicker.svelte';
-  import { t } from '$lib/i18n';
+  import { revelationLabel, surahMeaning, t } from '$lib/i18n';
   import { enableFocusMode, setFocusAyah } from '$lib/stores/focus.svelte';
   import { playbackState, playSurah, togglePlayback } from '$lib/stores/playback.svelte';
   import { surahState } from '$lib/stores/surah.svelte';
@@ -74,11 +74,11 @@
       {surahState.selected.nama}
     </p>
     <p class="mt-3 flex items-center justify-center gap-2 text-[13px] text-[var(--text-muted)]">
-      <span>{surahState.selected.tempatTurun === 'Madinah' ? 'Madaniyah' : 'Makkiyah'}</span>
+      <span>{revelationLabel(surahState.selected.tempatTurun)}</span>
       <span>·</span>
       <span class="tnum">{surahState.selected.jumlahAyat} {t('play.ayahCount')}</span>
       <span>·</span>
-      <span>{surahState.selected.arti}</span>
+      <span>{surahMeaning(surahState.selected.nomor, surahState.selected.arti)}</span>
     </p>
   </div>
 </header>

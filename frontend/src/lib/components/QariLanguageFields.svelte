@@ -11,19 +11,19 @@
     setTtsEnabled
   } from '$lib/stores/playback.svelte';
 
-  const qariOptions = [
-    { value: 'misyari', label: 'Mishary Rashid Alafasy', description: 'Balanced recitation' },
-    { value: 'sudais', label: 'Abdurrahman As-Sudais', description: 'Makkah imam' },
-    { value: 'dossari', label: 'Ibrahim Al-Dossari', description: 'Clear cadence' },
-    { value: 'juhany', label: 'Abdullah Al-Juhany', description: 'Haram reciter' },
-    { value: 'qasim', label: 'Abdul Muhsin Al-Qasim', description: 'Madinah imam' },
-    { value: 'yasser', label: 'Yasser Al-Dosari', description: 'Warm tone' }
-  ];
+  const qariOptions = $derived([
+    { value: 'misyari', label: 'Mishary Rashid Alafasy', description: t('settings.qari.misyari') },
+    { value: 'sudais', label: 'Abdurrahman As-Sudais', description: t('settings.qari.sudais') },
+    { value: 'dossari', label: 'Ibrahim Al-Dossari', description: t('settings.qari.dossari') },
+    { value: 'juhany', label: 'Abdullah Al-Juhany', description: t('settings.qari.juhany') },
+    { value: 'qasim', label: 'Abdul Muhsin Al-Qasim', description: t('settings.qari.qasim') },
+    { value: 'yasser', label: 'Yasser Al-Dosari', description: t('settings.qari.yasser') }
+  ]);
 
-  const languageOptions = [
-    { value: 'id', label: 'Indonesian', description: 'Terjemahan Indonesia' },
-    { value: 'en', label: 'English', description: 'English translation' }
-  ];
+  const languageOptions = $derived([
+    { value: 'id', label: t('settings.lang.id'), description: t('settings.lang.idHint') },
+    { value: 'en', label: t('settings.lang.en'), description: t('settings.lang.enHint') }
+  ]);
 
   let isTtsVoiceReady = $derived(playbackState.ttsVoiceStatus === 'ready');
   let ttsToggleDisabled = $derived(
