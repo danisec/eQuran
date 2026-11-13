@@ -1,0 +1,184 @@
+//! Runtime discovery for the Supertonic interpreter and worker script.
+
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
+use std::process::Stdio;
+use std::sync::{Mutex as StdMutex, OnceLock};
+
+use super::{
+    DEFAULT_DEVICE, DEFAULT_IDLE_TIMEOUT_SECS, DEFAULT_TOTAL_STEPS, DEFAULT_VOICE, TtsVoiceStatus,
+};
+
+pub(super) struct SupertonicConfig {
+    pub(super) python: PathBuf,
+    pub(super) gpu_python: Option<PathBuf>,
+    pub(super) script: PathBuf,
+    pub(super) voice: String,
+    pub(super) total_steps: u32,
+    pub(super) device: String,
+    pub(super) idle_timeout_secs: u32,
+}
+
+impl SupertonicConfig {
+    pub(super) fn from_env_or_project_roots(project_roots: &[PathBuf]) -> Self {
+        let script = std::env::var_os("EQURAN_TTS_SUPERTONIC")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| first_project_file(project_roots, "tts/tts_supertonic.py"));
+
+        let python = std::env::var_os("EQURAN_TTS_PYTHON")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| {
+                let venv_python = first_project_file(project_roots, "tts/.venv/bin/python");
+                if venv_python.is_file() {
+                    venv_python
+                } else {
+                    PathBuf::from("python3")
+                }
+            });
+
+        // A GPU-capable ONNX Runtime wheel can be installed into a side venv
+        // without touching the system interpreter. Prefer it when present.
+        let gpu_python = first_project_file(project_roots, "tts/.venv-gpu/bin/python");
+        let gpu_python = gpu_python.is_file().then_some(gpu_python);
+
+        let voice = std::env::var("EQURAN_TTS_SUPERTONIC_VOICE")
+            .ok()
+            .filter(|voice| !voice.trim().is_empty())
+            .unwrap_or_else(|| DEFAULT_VOICE.to_owned());
+
+        let total_steps = std::env::var("EQURAN_TTS_SUPERTONIC_STEPS")
+            .ok()
+            .and_then(|steps| steps.trim().parse::<u32>().ok())
+            .filter(|steps| (1..=100).contains(steps))
+            .unwrap_or(DEFAULT_TOTAL_STEPS);
+
+        let device = std::env::var("EQURAN_TTS_DEVICE")
+            .ok()
+            .map(|device| device.trim().to_ascii_lowercase())
+            .filter(|device| matches!(device.as_str(), "auto" | "cpu" | "gpu"))
+            .unwrap_or_else(|| DEFAULT_DEVICE.to_owned());
+
+        let idle_timeout_secs = std::env::var("EQURAN_TTS_IDLE_TIMEOUT")
+            .ok()
+            .and_then(|secs| secs.trim().parse::<u32>().ok())
+            .unwrap_or(DEFAULT_IDLE_TIMEOUT_SECS);
+
+        Self {
+            python,
+            gpu_python,
+            script,
+            voice,
+            total_steps,
+            device,
+            idle_timeout_secs,
+        }
+    }
+
+    /// Interpreter used for synthesis.
+    ///
+    /// The GPU venv is only chosen when it actually has the package, so a
+    /// half-built venv degrades to the CPU interpreter instead of disabling TTS.
+    pub(super) fn synthesis_python(&self) -> &Path {
+        match &self.gpu_python {
+            Some(python) if supertonic_module_available(python) => python,
+            _ => &self.python,
+        }
+    }
+
+    pub(super) fn python_is_usable(&self) -> bool {
+        supertonic_module_available(self.synthesis_python())
+    }
+
+    pub(super) fn is_usable(&self) -> bool {
+        self.script.is_file() && self.python_is_usable()
+    }
+}
+
+pub(super) fn status_from_config(config: &SupertonicConfig) -> TtsVoiceStatus {
+    if !config.script.is_file() {
+        return TtsVoiceStatus::MissingScript;
+    }
+    if !config.python_is_usable() {
+        return TtsVoiceStatus::MissingRuntime;
+    }
+    TtsVoiceStatus::Ready
+}
+
+/// Resolves the first `relative_path` that exists under any project root.
+fn first_project_file(project_roots: &[PathBuf], relative_path: &str) -> PathBuf {
+    project_roots
+        .iter()
+        .map(|root| root.join(relative_path))
+        .find(|path| path.is_file())
+        .unwrap_or_else(|| {
+            project_roots
+                .first()
+                .map(|root| root.join(relative_path))
+                .unwrap_or_else(|| PathBuf::from(relative_path))
+        })
+}
+
+/// Reads the interpreter's version as `major.minor.patch`, or `None` when it
+/// cannot be executed at all.
+pub(super) fn interpreter_version(python: &Path) -> Option<String> {
+    let output = std::process::Command::new(python)
+        .arg("-c")
+        .arg("import sys; print('%d.%d.%d' % sys.version_info[:3])")
+        .stdin(Stdio::null())
+        .stderr(Stdio::null())
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let version = String::from_utf8_lossy(&output.stdout).trim().to_owned();
+    (!version.is_empty()).then_some(version)
+}
+
+/// Probes `import supertonic` once per interpreter path.
+///
+/// Spawning a Python process costs hundreds of milliseconds, and readiness is
+/// queried on every playback command, so results are memoized for the lifetime
+/// of the process. A bare interpreter name such as `python3` is resolved
+/// through `PATH` first, so the cache key is the real executable.
+pub(super) fn supertonic_module_available(python: &Path) -> bool {
+    static CACHE: OnceLock<StdMutex<HashMap<PathBuf, bool>>> = OnceLock::new();
+
+    let key = if python.components().count() == 1 {
+        which_in_path(python)
+    } else {
+        None
+    }
+    .unwrap_or_else(|| python.to_path_buf());
+
+    let cache = CACHE.get_or_init(|| StdMutex::new(HashMap::new()));
+    if let Ok(guard) = cache.lock()
+        && let Some(cached) = guard.get(&key)
+    {
+        return *cached;
+    }
+
+    let available = std::process::Command::new(&key)
+        .arg("-c")
+        .arg("import supertonic")
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map(|status| status.success())
+        .unwrap_or(false);
+
+    if let Ok(mut guard) = cache.lock() {
+        guard.insert(key, available);
+    }
+
+    available
+}
+
+/// Resolves a bare executable name through `PATH`.
+fn which_in_path(name: &Path) -> Option<PathBuf> {
+    let path = std::env::var_os("PATH")?;
+    std::env::split_paths(&path)
+        .map(|dir| dir.join(name))
+        .find(|candidate| candidate.is_file())
+}
