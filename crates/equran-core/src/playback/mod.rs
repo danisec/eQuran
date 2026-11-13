@@ -1,7 +1,9 @@
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use anyhow::{Context, Result, bail};
+use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 
 use crate::{
@@ -94,6 +96,21 @@ impl AyahSelection {
             to_ayah,
         }
     }
+}
+
+/// One ayah plus the context every playback phase needs.
+///
+/// Grouping these values keeps the phase helpers from threading the same
+/// eight arguments through every call.
+struct AyahRequest<'a> {
+    surah_number: u8,
+    ayah: &'a Ayat,
+    next_ayah: Option<&'a Ayat>,
+    english_surah: Option<&'a EnglishSurah>,
+    qari: Qari,
+    lang: Lang,
+    current: usize,
+    total: usize,
 }
 
 impl PlaybackEngine {
@@ -196,14 +213,16 @@ impl PlaybackEngine {
             let ayah = selected_ayat[index];
             let next_ayah = selected_ayat.get(index + 1).copied();
             self.play_ayah(
-                surah.nomor,
-                ayah,
-                next_ayah,
-                english_surah,
-                qari,
-                lang,
-                ayah.nomor_ayat as usize,
-                surah.jumlah_ayat as usize,
+                AyahRequest {
+                    surah_number: surah.nomor,
+                    ayah,
+                    next_ayah,
+                    english_surah,
+                    qari,
+                    lang,
+                    current: ayah.nomor_ayat as usize,
+                    total: surah.jumlah_ayat as usize,
+                },
                 on_event,
             )
             .await?;
@@ -273,220 +292,261 @@ impl PlaybackEngine {
         Ok(())
     }
 
+    /// Plays one ayah: recitation first, then the optional translation and
+    /// tafsir voices, while the prefetch for the next ayah settles in the
+    /// background.
     async fn play_ayah(
         &self,
-        surah_number: u8,
-        ayah: &Ayat,
-        next_ayah: Option<&Ayat>,
-        english_surah: Option<&EnglishSurah>,
-        qari: Qari,
-        lang: Lang,
-        current: usize,
-        total: usize,
+        request: AyahRequest<'_>,
         on_event: Option<&PlaybackEventHandler>,
     ) -> Result<()> {
-        let translation = self.translation_for(ayah, english_surah, lang)?;
-        display::print_ayah(ayah, lang, translation);
-        self.emit_event(
-            on_event,
-            surah_number,
-            ayah.nomor_ayat,
-            PlaybackPhase::Recitation,
-            current,
-            total,
-        );
+        let translation =
+            self.translation_for(request.ayah, request.english_surah, request.lang)?;
+        display::print_ayah(request.ayah, request.lang, translation);
+        self.emit_event(on_event, &request, PlaybackPhase::Recitation);
 
         if self.dry_run {
             return Ok(());
         }
 
-        let tts_generation_plan = TtsGenerationPlan::new(
+        let plan = TtsGenerationPlan::new(
             self.tts_enabled.load(Ordering::Relaxed),
             self.prefetch_tts,
-            next_ayah.is_some(),
+            request.next_ayah.is_some(),
         );
 
-        let current_tts_handle = if tts_generation_plan.current_ayah {
-            let current_translation = translation.to_owned();
-            let tts = self.tts.clone();
-            let current_ayah_number = ayah.nomor_ayat;
-            Some(tokio::spawn(async move {
-                tts.synthesize_cached(
-                    &current_translation,
-                    lang,
-                    surah_number,
-                    current_ayah_number,
-                )
-                .await
-            }))
-        } else {
-            None
-        };
-
+        let translation_task = plan.current_ayah.then(|| {
+            self.spawn_translation_tts(
+                request.surah_number,
+                request.ayah.nomor_ayat,
+                translation.to_owned(),
+                request.lang,
+            )
+        });
         // The tafsir is synthesised in parallel with the recitation so its
         // first chunk is usually ready by the time the translation ends.
-        let tafsir_text = self
-            .read_tafsir
-            .then_some(ayah.tafsir.as_deref())
-            .flatten()
-            .map(str::trim)
-            .filter(|text| !text.is_empty())
-            .map(str::to_owned);
-
-        let tafsir_handle = tafsir_text.as_ref().map(|text| {
-            let chunks = TtsEngine::split_tafsir_text(text);
-            let tts = self.tts.clone();
-            let ayah_number = ayah.nomor_ayat;
-            tokio::spawn(async move {
-                let mut paths = Vec::with_capacity(chunks.len());
-                for (index, chunk) in chunks.iter().enumerate() {
-                    paths.push(
-                        tts.synthesize_tafsir_chunk_cached(
-                            chunk,
-                            surah_number,
-                            ayah_number,
-                            index + 1,
-                        )
-                        .await?,
-                    );
-                }
-                Ok::<_, anyhow::Error>(paths)
-            })
-        });
-
-        let prefetch_handle = if tts_generation_plan.next_ayah {
-            let next = next_ayah.expect("next ayah exists when prefetch is planned");
-            let next_translation = self.translation_for(next, english_surah, lang)?.to_owned();
-            let tts = self.tts.clone();
-            let next_ayah_number = next.nomor_ayat;
-            Some(tokio::spawn(async move {
-                tts.synthesize_cached(&next_translation, lang, surah_number, next_ayah_number)
-                    .await
-            }))
-        } else {
-            None
-        };
+        let tafsir_task = self.spawn_tafsir_tts(&request);
+        let prefetch_task = self.spawn_prefetch_tts(&request, plan)?;
 
         if self.cancel_token.is_cancelled() {
             return Ok(());
         }
 
-        let audio_url = ayah.audio.get(qari.key()).with_context(|| {
-            format!(
-                "missing audio URL for qari {} ayah {}",
-                qari.key(),
-                ayah.nomor_ayat
-            )
-        })?;
+        self.play_recitation(&request).await?;
+
+        if self.cancel_token.is_cancelled() {
+            return Ok(());
+        }
+
+        if plan.current_ayah {
+            self.play_translation(&request, translation, translation_task, on_event)
+                .await?;
+        }
+
+        self.play_tafsir(&request, tafsir_task, on_event).await?;
+        Self::await_prefetch(prefetch_task).await;
+
+        Ok(())
+    }
+
+    /// Streams the qari recitation, downloading it into the cache when needed.
+    async fn play_recitation(&self, request: &AyahRequest<'_>) -> Result<()> {
+        let audio_url = request
+            .ayah
+            .audio
+            .get(request.qari.key())
+            .with_context(|| {
+                format!(
+                    "missing audio URL for qari {} ayah {}",
+                    request.qari.key(),
+                    request.ayah.nomor_ayat
+                )
+            })?;
         let audio_path = self
             .cache
             .get_or_download(
                 &self.api,
                 audio_url,
-                &audio_filename(qari.key(), surah_number, ayah.nomor_ayat),
+                &audio_filename(
+                    request.qari.key(),
+                    request.surah_number,
+                    request.ayah.nomor_ayat,
+                ),
             )
             .await?;
-        play_audio_controlled(&audio_path, &self.cancel_token, &self.control).await?;
+        play_audio_controlled(&audio_path, &self.cancel_token, &self.control).await
+    }
+
+    /// Plays the generated translation, waiting for the render that was started
+    /// before the recitation so the two do not run back to back.
+    async fn play_translation(
+        &self,
+        request: &AyahRequest<'_>,
+        translation: &str,
+        task: Option<JoinHandle<Result<PathBuf>>>,
+        on_event: Option<&PlaybackEventHandler>,
+    ) -> Result<()> {
+        self.emit_event(on_event, request, PlaybackPhase::Translation);
+
+        let tts_path = match task {
+            Some(handle) => handle
+                .await
+                .context("TTS generation task was cancelled")??,
+            None => {
+                self.tts
+                    .synthesize_cached(
+                        translation,
+                        request.lang,
+                        request.surah_number,
+                        request.ayah.nomor_ayat,
+                    )
+                    .await?
+            }
+        };
+
+        self.emit_event(on_event, request, PlaybackPhase::Cache);
+        play_audio_controlled(&tts_path, &self.cancel_token, &self.control)
+            .await
+            .or_else(|error| {
+                bail!(
+                    "failed to play generated TTS file {}: {error}",
+                    tts_path.display()
+                )
+            })
+    }
+
+    /// Plays the tafsir chunks in order, aborting the render when the session
+    /// was stopped while it was still being generated.
+    async fn play_tafsir(
+        &self,
+        request: &AyahRequest<'_>,
+        task: Option<JoinHandle<Result<Vec<PathBuf>>>>,
+        on_event: Option<&PlaybackEventHandler>,
+    ) -> Result<()> {
+        let Some(handle) = task else {
+            return Ok(());
+        };
 
         if self.cancel_token.is_cancelled() {
+            handle.abort();
             return Ok(());
         }
 
-        if tts_generation_plan.current_ayah {
-            self.emit_event(
-                on_event,
-                surah_number,
-                ayah.nomor_ayat,
-                PlaybackPhase::Translation,
-                current,
-                total,
-            );
-            let tts_path = if let Some(handle) = current_tts_handle {
-                handle
-                    .await
-                    .context("TTS generation task was cancelled")??
-            } else {
-                self.tts
-                    .synthesize_cached(translation, lang, surah_number, ayah.nomor_ayat)
-                    .await?
-            };
-            self.emit_event(
-                on_event,
-                surah_number,
-                ayah.nomor_ayat,
-                PlaybackPhase::Cache,
-                current,
-                total,
-            );
-            play_audio_controlled(&tts_path, &self.cancel_token, &self.control)
-                .await
-                .or_else(|error| {
-                    bail!(
-                        "failed to play generated TTS file {}: {error}",
-                        tts_path.display()
-                    )
-                })?;
-        }
+        self.emit_event(on_event, request, PlaybackPhase::Tafsir);
 
-        if let Some(handle) = tafsir_handle {
+        let chunk_paths = handle
+            .await
+            .context("tafsir TTS generation task was cancelled")??;
+
+        for chunk_path in chunk_paths {
             if self.cancel_token.is_cancelled() {
-                handle.abort();
                 return Ok(());
             }
-
-            self.emit_event(
-                on_event,
-                surah_number,
-                ayah.nomor_ayat,
-                PlaybackPhase::Tafsir,
-                current,
-                total,
-            );
-
-            let chunk_paths = handle
+            play_audio_controlled(&chunk_path, &self.cancel_token, &self.control)
                 .await
-                .context("tafsir TTS generation task was cancelled")??;
-
-            for chunk_path in chunk_paths {
-                if self.cancel_token.is_cancelled() {
-                    return Ok(());
-                }
-                play_audio_controlled(&chunk_path, &self.cancel_token, &self.control)
-                    .await
-                    .with_context(|| {
-                        format!(
-                            "failed to play generated tafsir audio {}",
-                            chunk_path.display()
-                        )
-                    })?;
-            }
-        }
-
-        if let Some(handle) = prefetch_handle {
-            match handle.await {
-                Ok(Ok(_)) | Ok(Err(_)) | Err(_) => {}
-            }
+                .with_context(|| {
+                    format!(
+                        "failed to play generated tafsir audio {}",
+                        chunk_path.display()
+                    )
+                })?;
         }
 
         Ok(())
     }
 
+    /// Renders the current ayah translation in the background.
+    fn spawn_translation_tts(
+        &self,
+        surah_number: u8,
+        ayah_number: u16,
+        text: String,
+        lang: Lang,
+    ) -> JoinHandle<Result<PathBuf>> {
+        let tts = self.tts.clone();
+        tokio::spawn(async move {
+            tts.synthesize_cached(&text, lang, surah_number, ayah_number)
+                .await
+        })
+    }
+
+    /// Renders every tafsir chunk in the background, when tafsir reading is on.
+    fn spawn_tafsir_tts(
+        &self,
+        request: &AyahRequest<'_>,
+    ) -> Option<JoinHandle<Result<Vec<PathBuf>>>> {
+        let text = self
+            .read_tafsir
+            .then_some(request.ayah.tafsir.as_deref())
+            .flatten()
+            .map(str::trim)
+            .filter(|text| !text.is_empty())?;
+
+        let chunks = TtsEngine::split_tafsir_text(text);
+        let tts = self.tts.clone();
+        let surah_number = request.surah_number;
+        let ayah_number = request.ayah.nomor_ayat;
+
+        Some(tokio::spawn(async move {
+            let mut paths = Vec::with_capacity(chunks.len());
+            for (index, chunk) in chunks.iter().enumerate() {
+                paths.push(
+                    tts.synthesize_tafsir_chunk_cached(chunk, surah_number, ayah_number, index + 1)
+                        .await?,
+                );
+            }
+            Ok(paths)
+        }))
+    }
+
+    /// Warms the next ayah's translation while the current one plays.
+    fn spawn_prefetch_tts(
+        &self,
+        request: &AyahRequest<'_>,
+        plan: TtsGenerationPlan,
+    ) -> Result<Option<JoinHandle<Result<PathBuf>>>> {
+        if !plan.next_ayah {
+            return Ok(None);
+        }
+
+        let next = request
+            .next_ayah
+            .expect("next ayah exists when prefetch is planned");
+        let translation = self
+            .translation_for(next, request.english_surah, request.lang)?
+            .to_owned();
+
+        Ok(Some(self.spawn_translation_tts(
+            request.surah_number,
+            next.nomor_ayat,
+            translation,
+            request.lang,
+        )))
+    }
+
+    /// Waits for the prefetch so a failed render is not reported as a playback
+    /// failure: the next ayah simply renders again when it starts.
+    async fn await_prefetch(task: Option<JoinHandle<Result<PathBuf>>>) {
+        if let Some(handle) = task {
+            match handle.await {
+                Ok(Ok(_)) | Ok(Err(_)) | Err(_) => {}
+            }
+        }
+    }
+
     fn emit_event(
         &self,
         on_event: Option<&PlaybackEventHandler>,
-        surah: u8,
-        ayah: u16,
+        request: &AyahRequest<'_>,
         phase: PlaybackPhase,
-        current: usize,
-        total: usize,
     ) {
         if let Some(handler) = on_event {
             handler(PlaybackEvent {
-                surah,
-                ayah,
+                surah: request.surah_number,
+                ayah: request.ayah.nomor_ayat,
                 phase,
-                current,
-                total,
+                current: request.current,
+                total: request.total,
             });
         }
     }
