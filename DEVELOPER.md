@@ -136,7 +136,10 @@ Teks yang dibacakan untuk `lang = en` adalah **tafsir Inggris** ayat dari
 satu kalimat dari API English. Tafsir diambil sekali per surah saat playback
 dimulai; jika gagal, engine jatuh ke `textEnglish` dari `equran.id/api/en`.
 Panel tafsir memakai sumber yang sama saat bahasa antarmuka Inggris, sedangkan
-bahasa Indonesia tetap memakai `quran-api-id.vercel.app`.
+bahasa Indonesia tetap memakai `quran-api-id.vercel.app`. UmmahAPI mengirim
+komentar sebagai satu string tanpa baris baru, jadi panel menyusun ulang
+paragraf di batas kalimat untuk tampilan (`frontend/src/lib/tafsir.ts`); teks
+mentah tetap dipakai untuk narasi TTS.
 
 Endpoint tafsir UmmahAPI bisa dipakai tanpa kunci. Untuk kuota/atribusi
 pribadi, set `UMMAH_API_KEY` di environment aplikasi; nilainya tidak pernah

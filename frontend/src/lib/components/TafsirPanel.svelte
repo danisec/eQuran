@@ -3,6 +3,7 @@
   import { t } from '$lib/i18n';
   import { playbackState } from '$lib/stores/playback.svelte';
   import { surahState } from '$lib/stores/surah.svelte';
+  import { formatTafsirText } from '$lib/tafsir';
   import {
     isTafsirVoiceActive,
     loadTafsir,
@@ -24,6 +25,11 @@
   let { ayahNumber, loading }: Props = $props();
 
   let tafsir = $derived(tafsirForAyah(surahState.selected.nomor, ayahNumber));
+  // The English source arrives without paragraph breaks; keep the raw text for
+  // speech and format only what is displayed.
+  let tafsirBody = $derived(
+    tafsir ? formatTafsirText(tafsir.teks) : ''
+  );
   let speaking = $derived(tafsirState.speakingKey === `${surahState.selected.nomor}:${ayahNumber}`);
   let voiceActive = $derived(isTafsirVoiceActive(surahState.selected.nomor, ayahNumber));
   let voicePaused = $derived(voiceActive && tafsirVoiceState.paused);
@@ -82,7 +88,7 @@
   {#if loading}
     <p class="tafsir-status">{t('ayah.tafsirLoading')}</p>
   {:else if tafsir}
-    <p class="tafsir-body whitespace-pre-line">{tafsir.teks}</p>
+    <p class="tafsir-body whitespace-pre-line">{tafsirBody}</p>
   {:else}
     <p class="tafsir-status">{tafsirState.error || t('ayah.tafsirMissing')}</p>
   {/if}

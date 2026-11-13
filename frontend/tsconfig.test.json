@@ -9,5 +9,5 @@
     "skipLibCheck": true,
     "types": ["node"]
   },
-  "include": ["tests/**/*.ts", "src/lib/highlight.ts"]
+  "include": ["tests/**/*.ts", "src/lib/highlight.ts", "src/lib/tafsir.ts"]
 }
