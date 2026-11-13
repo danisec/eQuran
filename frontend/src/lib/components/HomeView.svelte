@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import Icon from '$lib/components/Icon.svelte';
+  import { highlightSegments } from '$lib/highlight';
   import { t } from '$lib/i18n';
   import { bookmarkState, loadBookmarks } from '$lib/stores/bookmarks.svelte';
   import { playFromAyah, playbackState } from '$lib/stores/playback.svelte';
@@ -70,43 +71,6 @@
       searchInput?.blur();
       clearSearch();
     }
-  }
-
-  /**
-   * Splits a snippet into plain and matching segments so the query words can be
-   * marked. Matching is case-insensitive and per word; the snippet comes from
-   * the corpus, never from the reader, and Svelte escapes each segment, so this
-   * stays safe without injecting HTML.
-   */
-  function segments(text: string): Array<{ text: string; match: boolean }> {
-    const words = searchState.query
-      .trim()
-      .toLowerCase()
-      .split(/\s+/)
-      .filter((word) => word.length > 1);
-    if (words.length === 0) return [{ text, match: false }];
-
-    const parts: Array<{ text: string; match: boolean }> = [];
-    let index = 0;
-    while (index < text.length) {
-      let best = -1;
-      let bestLength = 0;
-      for (const word of words) {
-        const found = text.toLowerCase().indexOf(word, index);
-        if (found !== -1 && (best === -1 || found < best)) {
-          best = found;
-          bestLength = word.length;
-        }
-      }
-      if (best === -1) {
-        parts.push({ text: text.slice(index), match: false });
-        break;
-      }
-      if (best > index) parts.push({ text: text.slice(index, best), match: false });
-      parts.push({ text: text.slice(best, best + bestLength), match: true });
-      index = best + bestLength;
-    }
-    return parts;
   }
 </script>
 
@@ -205,7 +169,7 @@
                   <p class="result-arabic arabic">{hit.snippet}</p>
                 {:else}
                   <p class="result-snippet">
-                    {#each segments(hit.snippet) as segment}
+                    {#each highlightSegments(hit.snippet, searchState.query) as segment}
                       {#if segment.match}<mark>{segment.text}</mark>{:else}{segment.text}{/if}
                     {/each}
                   </p>
