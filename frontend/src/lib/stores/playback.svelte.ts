@@ -223,13 +223,15 @@ export async function startPlayback(
     }
 
     await invoke('start_playback', {
-      surahNumber,
-      qari: playbackState.qari,
-      lang: playbackState.lang,
-      fromAyah: fromAyah ?? null,
-      toAyah: toAyah ?? null,
-      ttsEnabled: playbackState.ttsEnabled,
-      readTafsir: playbackState.readTafsir
+      request: {
+        surahNumber,
+        qari: playbackState.qari,
+        lang: playbackState.lang,
+        fromAyah: fromAyah ?? null,
+        toAyah: toAyah ?? null,
+        ttsEnabled: playbackState.ttsEnabled,
+        readTafsir: playbackState.readTafsir
+      }
     });
     engineAlive = true;
   } catch (error) {

@@ -1,23 +1,18 @@
-use std::collections::VecDeque;
-use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use equran_core::{
-    audio::{
-        cache::AudioCache,
-        player::{PlaybackControl, play_audio_controlled},
-        tts::{TtsEngine, TtsVoiceStatus},
-    },
+    api::models::{EnglishSurah, Surah},
+    audio::{cache::AudioCache, player::PlaybackControl},
     domain::{Lang, Qari},
     playback::{AyahSelection, PlaybackEngine, PlaybackEvent},
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tauri::{Emitter, State, Window};
 use tokio::sync::Mutex;
-use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 
+use super::tts::ensure_tts_ready;
 use crate::AppState;
 
 #[derive(Clone, Debug, Serialize)]
@@ -43,13 +38,13 @@ impl From<PlaybackEvent> for PlaybackProgressPayload {
 }
 
 pub struct PlaybackState {
-    cancel_token: Mutex<CancellationToken>,
-    tts_enabled: Arc<AtomicBool>,
-    tafsir_voice_active: Arc<AtomicBool>,
-    tafsir_voice_paused: Arc<AtomicBool>,
-    tafsir_control: Arc<PlaybackControl>,
+    pub(crate) cancel_token: Mutex<CancellationToken>,
+    pub(crate) tts_enabled: Arc<AtomicBool>,
+    pub(crate) tafsir_voice_active: Arc<AtomicBool>,
+    pub(crate) tafsir_voice_paused: Arc<AtomicBool>,
+    pub(crate) tafsir_control: Arc<PlaybackControl>,
     /// The recitation's own pause/resume flag, shared with the engine.
-    playback_control: Arc<PlaybackControl>,
+    pub(crate) playback_control: Arc<PlaybackControl>,
 }
 
 impl Default for PlaybackState {
@@ -71,29 +66,83 @@ impl PlaybackState {
     }
 }
 
+/// Arguments for [`start_playback`], grouped so the command takes one request
+/// value instead of a flat list of optional fields.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StartPlaybackRequest {
+    pub surah_number: u8,
+    pub qari: String,
+    pub lang: String,
+    pub from_ayah: Option<u16>,
+    pub to_ayah: Option<u16>,
+    pub tts_enabled: Option<bool>,
+    pub read_tafsir: Option<bool>,
+}
+
+/// The session resolved before the playback task starts.
+struct PreparedSession {
+    surah: Surah,
+    english_surah: Option<EnglishSurah>,
+    qari: Qari,
+    lang: Lang,
+    selection: AyahSelection,
+    tts_enabled: bool,
+    read_tafsir: bool,
+}
+
 #[tauri::command]
 pub async fn start_playback(
     window: Window,
     state: State<'_, AppState>,
     playback_state: State<'_, PlaybackState>,
-    surah_number: u8,
-    qari: String,
-    lang: String,
-    from_ayah: Option<u16>,
-    to_ayah: Option<u16>,
-    tts_enabled: Option<bool>,
-    read_tafsir: Option<bool>,
+    request: StartPlaybackRequest,
 ) -> Result<(), String> {
-    let qari: Qari = qari.parse()?;
-    let lang: Lang = lang.parse()?;
-    let mut tts_enabled = tts_enabled.unwrap_or(true);
-    let mut read_tafsir = read_tafsir.unwrap_or(false);
+    let session = prepare_session(&window, state.inner(), request).await?;
+    let cancel_token = reset_cancel_token(playback_state.inner()).await;
 
-    // Qari recitation is the core of the app; the translation voice is additive.
-    // A missing TTS runtime must never stop the recitation, so it only downgrades
-    // the session to qari-only and says why.
+    let cache = AudioCache::new().map_err(|e| e.to_string())?;
+    let tts_flag = playback_state.tts_enabled.clone();
+    tts_flag.store(session.tts_enabled, Ordering::Relaxed);
+
+    // A previous session may have ended while paused; a new one always starts
+    // sounding.
+    playback_state.playback_control.resume();
+
+    let engine = PlaybackEngine::new(
+        state.api().clone(),
+        cache,
+        false,
+        session.tts_enabled,
+        false,
+    )
+    .with_project_roots(state.tts_roots().to_vec())
+    .with_tts_enabled_flag(tts_flag)
+    .with_read_tafsir(session.read_tafsir)
+    .with_cancel_token(cancel_token.clone())
+    .with_playback_control(playback_state.playback_control.clone());
+
+    spawn_playback(window, engine, session, cancel_token);
+    Ok(())
+}
+
+/// Resolves the request into a playable session.
+///
+/// Qari recitation is the core of the app; the translation voice is additive.
+/// A missing TTS runtime must never stop the recitation, so it only downgrades
+/// the session to qari-only and says why.
+async fn prepare_session(
+    window: &Window,
+    state: &AppState,
+    request: StartPlaybackRequest,
+) -> Result<PreparedSession, String> {
+    let qari: Qari = request.qari.parse()?;
+    let lang: Lang = request.lang.parse()?;
+    let mut tts_enabled = request.tts_enabled.unwrap_or(true);
+    let mut read_tafsir = request.read_tafsir.unwrap_or(false);
+
     if tts_enabled || read_tafsir {
-        match ensure_tts_ready(&state) {
+        match ensure_tts_ready(state) {
             Ok(()) => {}
             Err(reason) => {
                 tts_enabled = false;
@@ -105,23 +154,16 @@ pub async fn start_playback(
             }
         }
     }
-    let cancel_token = {
-        let mut token = playback_state.cancel_token.lock().await;
-        token.cancel();
-        let new_token = CancellationToken::new();
-        *token = new_token.clone();
-        new_token
-    };
 
-    let api = state.api().clone();
-    let surah = api
-        .fetch_surah(surah_number)
+    let api = state.api();
+    let mut surah = api
+        .fetch_surah(request.surah_number)
         .await
         .map_err(|e| e.to_string())?;
 
     let english_surah = if lang == Lang::En {
         Some(
-            api.fetch_surah_english(surah_number)
+            api.fetch_surah_english(request.surah_number)
                 .await
                 .map_err(|e| e.to_string())?,
         )
@@ -133,9 +175,8 @@ pub async fn start_playback(
     // playback (which reads it as the translation) and for the optional
     // "read tafsir" mode. A failure here is not fatal: English playback falls
     // back to the verse translation and tafsir narration is skipped.
-    let mut surah = surah;
     if lang == Lang::En || read_tafsir {
-        match api.fetch_tafsir(surah_number).await {
+        match api.fetch_tafsir(request.surah_number).await {
             Ok(tafsir) => {
                 for ayah in &mut surah.ayat {
                     ayah.tafsir = tafsir
@@ -146,56 +187,67 @@ pub async fn start_playback(
                 }
             }
             Err(error) => {
-                eprintln!("Tafsir unavailable for surah {surah_number}: {error}");
+                eprintln!(
+                    "Tafsir unavailable for surah {}: {error}",
+                    request.surah_number
+                );
             }
         }
     }
 
-    let cache = AudioCache::new().map_err(|e| e.to_string())?;
-    let cancel_for_check = cancel_token.clone();
-    let tts_flag = playback_state.tts_enabled.clone();
-    tts_flag.store(tts_enabled, Ordering::Relaxed);
+    Ok(PreparedSession {
+        surah,
+        english_surah,
+        qari,
+        lang,
+        selection: AyahSelection::new(None, request.from_ayah, request.to_ayah),
+        tts_enabled,
+        read_tafsir,
+    })
+}
 
-    // A previous session may have ended while paused; a new one always starts
-    // sounding.
-    playback_state.playback_control.resume();
+/// Cancels the previous session and installs a fresh token for this one.
+async fn reset_cancel_token(playback_state: &PlaybackState) -> CancellationToken {
+    let mut token = playback_state.cancel_token.lock().await;
+    token.cancel();
+    let new_token = CancellationToken::new();
+    *token = new_token.clone();
+    new_token
+}
 
-    let engine = PlaybackEngine::new(api, cache, false, tts_enabled, false)
-        .with_project_roots(state.tts_roots().to_vec())
-        .with_tts_enabled_flag(tts_flag)
-        .with_read_tafsir(read_tafsir)
-        .with_cancel_token(cancel_token)
-        .with_playback_control(playback_state.playback_control.clone());
-
-    let selection = AyahSelection::new(None, from_ayah, to_ayah);
-
+/// Runs the engine on its own task so the command returns as soon as playback
+/// is scheduled, reporting progress and failures as window events.
+fn spawn_playback(
+    window: Window,
+    engine: PlaybackEngine,
+    session: PreparedSession,
+    cancel_token: CancellationToken,
+) {
     tokio::spawn(async move {
-        let window_clone = window.clone();
+        let window_for_events = window.clone();
         let event_handler = move |event: PlaybackEvent| {
             let payload = PlaybackProgressPayload::from(event);
-            let _ = window_clone.emit("playback-progress", &payload);
+            let _ = window_for_events.emit("playback-progress", &payload);
         };
 
         let result = engine
             .play_with_events(
-                &surah,
-                english_surah.as_ref(),
-                selection,
-                qari,
-                lang,
+                &session.surah,
+                session.english_surah.as_ref(),
+                session.selection,
+                session.qari,
+                session.lang,
                 Some(&event_handler),
             )
             .await;
 
-        if let Err(e) = &result {
-            let _ = window.emit("playback-error", e.to_string());
+        if let Err(error) = &result {
+            let _ = window.emit("playback-error", error.to_string());
         }
-        if !cancel_for_check.is_cancelled() {
+        if !cancel_token.is_cancelled() {
             let _ = window.emit("playback-finished", ());
         }
     });
-
-    Ok(())
 }
 
 #[tauri::command]
@@ -275,205 +327,43 @@ pub async fn set_tts_enabled(
     Ok(())
 }
 
-#[tauri::command]
-pub async fn is_tafsir_voice_active(
-    playback_state: State<'_, PlaybackState>,
-) -> Result<bool, String> {
-    Ok(playback_state.tafsir_voice_active.load(Ordering::Relaxed))
-}
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-#[tauri::command]
-pub async fn is_tafsir_voice_paused(
-    playback_state: State<'_, PlaybackState>,
-) -> Result<bool, String> {
-    Ok(playback_state.tafsir_voice_paused.load(Ordering::Relaxed))
-}
+    #[test]
+    fn start_request_deserializes_the_frontend_payload() {
+        let request: StartPlaybackRequest = serde_json::from_str(
+            r#"{
+                "surahNumber": 55,
+                "qari": "misyari",
+                "lang": "id",
+                "fromAyah": 1,
+                "toAyah": 3,
+                "ttsEnabled": false,
+                "readTafsir": true
+            }"#,
+        )
+        .expect("frontend payload should deserialize");
 
-/// Pauses the tafsir narration without discarding its position.
-///
-/// The audio thread keeps the decoded sink alive, so resuming continues from
-/// the same sample instead of restarting the chunk.
-#[tauri::command]
-pub async fn pause_tafsir_voice(playback_state: State<'_, PlaybackState>) -> Result<(), String> {
-    if !playback_state.tafsir_voice_active.load(Ordering::Relaxed) {
-        return Ok(());
+        assert_eq!(request.surah_number, 55);
+        assert_eq!(request.qari, "misyari");
+        assert_eq!(request.lang, "id");
+        assert_eq!(request.from_ayah, Some(1));
+        assert_eq!(request.to_ayah, Some(3));
+        assert_eq!(request.tts_enabled, Some(false));
+        assert_eq!(request.read_tafsir, Some(true));
     }
 
-    playback_state.tafsir_control.pause();
-    playback_state
-        .tafsir_voice_paused
-        .store(true, Ordering::Relaxed);
-    Ok(())
-}
+    #[test]
+    fn start_request_keeps_omitted_options_empty() {
+        let request: StartPlaybackRequest =
+            serde_json::from_str(r#"{"surahNumber":1,"qari":"sudais","lang":"en"}"#)
+                .expect("minimal payload should deserialize");
 
-#[tauri::command]
-pub async fn resume_tafsir_voice(playback_state: State<'_, PlaybackState>) -> Result<(), String> {
-    if !playback_state.tafsir_voice_active.load(Ordering::Relaxed) {
-        return Ok(());
-    }
-
-    playback_state.tafsir_control.resume();
-    playback_state
-        .tafsir_voice_paused
-        .store(false, Ordering::Relaxed);
-    Ok(())
-}
-
-#[tauri::command]
-pub async fn play_tafsir_voice(
-    playback_state: State<'_, PlaybackState>,
-    state: State<'_, AppState>,
-    surah_number: u8,
-    ayah_number: u16,
-    text: String,
-) -> Result<(), String> {
-    let text = text.trim().to_owned();
-    if text.is_empty() {
-        return Err("Tafsir text is empty".to_owned());
-    }
-
-    ensure_tts_ready(&state)?;
-
-    let cancel_token = {
-        let mut token = playback_state.cancel_token.lock().await;
-        token.cancel();
-        let new_token = CancellationToken::new();
-        *token = new_token.clone();
-        new_token
-    };
-
-    let cache = AudioCache::new().map_err(|e| e.to_string())?;
-    let tts = TtsEngine::with_project_roots(cache.root().clone(), state.tts_roots().to_vec());
-    let chunks = TtsEngine::split_tafsir_text(&text);
-    if chunks.is_empty() {
-        return Err("Tafsir text is empty".to_owned());
-    }
-
-    playback_state
-        .tafsir_voice_active
-        .store(true, Ordering::Relaxed);
-    playback_state
-        .tafsir_voice_paused
-        .store(false, Ordering::Relaxed);
-    playback_state.tafsir_control.resume();
-    let active_flag = playback_state.tafsir_voice_active.clone();
-    let paused_flag = playback_state.tafsir_voice_paused.clone();
-    let control = playback_state.tafsir_control.clone();
-    let result = play_tafsir_chunks(
-        tts,
-        chunks,
-        surah_number,
-        ayah_number,
-        cancel_token,
-        active_flag,
-        paused_flag,
-        control,
-    )
-    .await;
-    playback_state
-        .tafsir_voice_active
-        .store(false, Ordering::Relaxed);
-    playback_state
-        .tafsir_voice_paused
-        .store(false, Ordering::Relaxed);
-
-    result
-}
-
-#[allow(clippy::too_many_arguments)]
-async fn play_tafsir_chunks(
-    tts: TtsEngine,
-    chunks: Vec<String>,
-    surah_number: u8,
-    ayah_number: u16,
-    cancel_token: CancellationToken,
-    active_flag: Arc<AtomicBool>,
-    paused_flag: Arc<AtomicBool>,
-    control: Arc<PlaybackControl>,
-) -> Result<(), String> {
-    let current_audio = tts
-        .synthesize_tafsir_chunk_cached(&chunks[0], surah_number, ayah_number, 1)
-        .await
-        .map_err(|e| format!("Failed to generate tafsir voice: {e}"))?;
-
-    const TAFSIR_PREFETCH_AHEAD: usize = 3;
-    let mut next_chunk_index = 1;
-    let mut queued_audio: VecDeque<JoinHandle<anyhow::Result<PathBuf>>> = VecDeque::new();
-
-    while next_chunk_index < chunks.len() && queued_audio.len() < TAFSIR_PREFETCH_AHEAD {
-        queued_audio.push_back(spawn_tafsir_chunk_synthesis(
-            tts.clone(),
-            chunks[next_chunk_index].clone(),
-            surah_number,
-            ayah_number,
-            next_chunk_index + 1,
-        ));
-        next_chunk_index += 1;
-    }
-
-    let mut current_audio = Some(current_audio);
-
-    while let Some(audio_path) = current_audio.take() {
-        while next_chunk_index < chunks.len() && queued_audio.len() < TAFSIR_PREFETCH_AHEAD {
-            queued_audio.push_back(spawn_tafsir_chunk_synthesis(
-                tts.clone(),
-                chunks[next_chunk_index].clone(),
-                surah_number,
-                ayah_number,
-                next_chunk_index + 1,
-            ));
-            next_chunk_index += 1;
-        }
-
-        play_audio_controlled(&audio_path, &cancel_token, &control)
-            .await
-            .map_err(|e| format!("Failed to play tafsir audio: {e}"))?;
-
-        if cancel_token.is_cancelled() {
-            break;
-        }
-
-        if let Some(next_audio) = queued_audio.pop_front() {
-            current_audio = Some(
-                next_audio
-                    .await
-                    .map_err(|e| format!("failed to join tafsir TTS task: {e}"))?
-                    .map_err(|e| e.to_string())?,
-            );
-        }
-    }
-
-    active_flag.store(false, Ordering::Relaxed);
-    paused_flag.store(false, Ordering::Relaxed);
-    Ok(())
-}
-
-fn spawn_tafsir_chunk_synthesis(
-    tts: TtsEngine,
-    chunk: String,
-    surah_number: u8,
-    ayah_number: u16,
-    chunk_number: usize,
-) -> JoinHandle<anyhow::Result<PathBuf>> {
-    tokio::spawn(async move {
-        tts.synthesize_tafsir_chunk_cached(&chunk, surah_number, ayah_number, chunk_number)
-            .await
-    })
-}
-
-fn ensure_tts_ready(state: &AppState) -> Result<(), String> {
-    let cache = AudioCache::new().map_err(|e| e.to_string())?;
-    let tts = TtsEngine::with_project_roots(cache.root().clone(), state.tts_roots().to_vec());
-
-    match tts.voice_status() {
-        TtsVoiceStatus::Ready => Ok(()),
-        TtsVoiceStatus::MissingScript => Err(
-            "TTS engine files are missing. Reinstall eQuran before enabling TTS Translation."
-                .to_owned(),
-        ),
-        TtsVoiceStatus::MissingRuntime => Err(
-            "TTS runtime is not ready. Install the supertonic Python package, then restart eQuran."
-                .to_owned(),
-        ),
+        assert_eq!(request.from_ayah, None);
+        assert_eq!(request.to_ayah, None);
+        assert_eq!(request.tts_enabled, None);
+        assert_eq!(request.read_tafsir, None);
     }
 }

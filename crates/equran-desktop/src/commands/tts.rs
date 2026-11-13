@@ -33,6 +33,27 @@ pub fn tts_voice_status(state: &AppState) -> Result<TtsVoiceStatusPayload, Strin
     Ok(payload_from_status(status, diagnosis))
 }
 
+/// Fails with an actionable message when the local voice runtime is unusable.
+///
+/// Qari recitation never depends on this: callers downgrade the session to
+/// qari-only and surface the message instead of refusing to play.
+pub(crate) fn ensure_tts_ready(state: &AppState) -> Result<(), String> {
+    let cache = AudioCache::new().map_err(|e| e.to_string())?;
+    let tts = TtsEngine::with_project_roots(cache.root().clone(), state.tts_roots().to_vec());
+
+    match tts.voice_status() {
+        TtsVoiceStatus::Ready => Ok(()),
+        TtsVoiceStatus::MissingScript => Err(
+            "TTS engine files are missing. Reinstall eQuran before enabling TTS Translation."
+                .to_owned(),
+        ),
+        TtsVoiceStatus::MissingRuntime => Err(
+            "TTS runtime is not ready. Install the supertonic Python package, then restart eQuran."
+                .to_owned(),
+        ),
+    }
+}
+
 fn payload_from_status(status: TtsVoiceStatus, diagnosis: Option<String>) -> TtsVoiceStatusPayload {
     match status {
         TtsVoiceStatus::Ready => TtsVoiceStatusPayload {
