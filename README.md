@@ -80,7 +80,7 @@ equran-cli play --surah 1 --qari misyari --lang id --dry-run
 
 ### Desktop Application (with GUI)
 
-The eQuran desktop application includes a graphical interface and comes with **Natural Indonesian Voice TTS** pre-configured for high-quality translation audio.
+The eQuran desktop application includes a graphical interface and comes with **Supertonic 3 TTS** support for high-quality Indonesian and English translation audio.
 
 #### RPM-based Linux (Fedora, RHEL, CentOS, etc.)
 
@@ -130,7 +130,7 @@ cargo build --release --features audio
 sudo cp target/release/equran-cli /usr/local/bin/
 ```
 
-For Natural Indonesian Voice TTS support with CLI version, run setup:
+For Supertonic 3 TTS support with CLI version, run setup:
 
 ```bash
 cd tts
@@ -139,25 +139,20 @@ bash setup.sh
 
 ## Translation Voice Quality
 
-### Indonesian
+### Indonesian and English
 
-The application supports two voice engines:
+The application uses **Supertonic 3**, a fast on-device multilingual TTS engine.
 
-1. **Natural Indonesian Voice** (Recommended) - High-quality natural voice
-2. **Edge-TTS** - Standard voice from Microsoft Edge
-
-To use Natural Indonesian Voice, run setup once:
+Install the runtime once:
 
 ```bash
 cd tts
 bash setup.sh
 ```
 
-If not set up, the application automatically uses Edge-TTS.
-
-### English
-
-Uses Edge-TTS voice `en-US-ChristopherNeural`.
+The model (~400 MB) is downloaded automatically on first synthesis and cached in
+`~/.cache/supertonic3/`. If the runtime is missing, TTS translation is disabled
+with an actionable message instead of silently falling back to another engine.
 
 ## Advanced Options
 

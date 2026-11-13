@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onDestroy } from 'svelte';
+  import Icon from './Icon.svelte';
 
   export type SelectOption = {
     value: string;
@@ -63,7 +64,7 @@
 <svelte:window onkeydown={handleKeydown} />
 
 <div bind:this={root} class="custom-select">
-  <span class="custom-select-label">{label}</span>
+  <span class="field-label">{label}</span>
   <button
     type="button"
     class="custom-select-trigger"
@@ -77,9 +78,7 @@
         <span class="custom-select-description">{selected.description}</span>
       {/if}
     </span>
-    <svg class:open viewBox="0 0 20 20" class="custom-select-chevron" aria-hidden="true">
-      <path d="M5.25 7.75 10 12.5l4.75-4.75" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
-    </svg>
+    <Icon name="chevron-down" size={16} class="custom-select-chevron {open ? 'open' : ''}" />
   </button>
 
   {#if open}
@@ -100,7 +99,7 @@
             {/if}
           </span>
           {#if option.value === value}
-            <span class="custom-select-check">✓</span>
+            <span class="custom-select-check"><Icon name="check" size={16} /></span>
           {/if}
         </button>
       {/each}

@@ -1,6 +1,11 @@
-TTS
-sacremoses>=0.0.41
-nltk>=3.7
-onnxruntime>=1.7.0
-wget
-platformdirs
+supertonic>=1.3.1
+
+# GPU acceleration is optional: tts_supertonic.py detects whichever ONNX Runtime
+# build is installed and falls back to CPU. Install one of these instead of the
+# plain wheel to enable hybrid execution:
+#
+#   NVIDIA (CUDA 12):   pip install onnxruntime-gpu
+#   AMD (ROCm):         pip install onnxruntime-rocm
+#   Windows (any GPU):  pip install onnxruntime-directml
+#   Apple Silicon:      onnxruntime already ships CoreML
+#   Intel (OpenVINO):   pip install onnxruntime-openvino

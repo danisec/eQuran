@@ -11,11 +11,21 @@ pub struct Bookmark {
     pub ayah: u16,
     pub surah_name: String,
     pub ayah_text: String,
+    /// Translation captured when the verse was marked, so a mark reads on its
+    /// own in the marks rail. Absent on marks made before this field existed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub translation: Option<String>,
 }
 
 pub struct BookmarkState {
     bookmarks: Mutex<Vec<Bookmark>>,
     file_path: PathBuf,
+}
+
+impl Default for BookmarkState {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl BookmarkState {
@@ -68,6 +78,7 @@ pub async fn add_bookmark(
     ayah: u16,
     surah_name: String,
     ayah_text: String,
+    translation: Option<String>,
 ) -> Result<Vec<Bookmark>, String> {
     let mut bookmarks = state.bookmarks.lock().await;
     let already_exists = bookmarks.iter().any(|b| b.surah == surah && b.ayah == ayah);
@@ -77,6 +88,7 @@ pub async fn add_bookmark(
             ayah,
             surah_name,
             ayah_text,
+            translation,
         });
     }
     drop(bookmarks);
@@ -116,6 +128,7 @@ mod tests {
             ayah: 255,
             surah_name: "Al-Baqarah".to_owned(),
             ayah_text: "Ayatul Kursi".to_owned(),
+            translation: Some("Ayat Kursi".to_owned()),
         });
         assert_eq!(bookmarks.len(), 1);
 

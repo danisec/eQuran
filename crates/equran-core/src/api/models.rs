@@ -49,6 +49,10 @@ pub struct Ayat {
     pub teks_latin: String,
     #[serde(rename = "teksIndonesia")]
     pub teks_indonesia: String,
+    /// Tafsir text, filled in by the desktop layer when English playback needs
+    /// it. Never sent by the API.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tafsir: Option<String>,
     pub audio: HashMap<String, String>,
 }
 

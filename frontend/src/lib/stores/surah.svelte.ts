@@ -1,5 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 
+import { rememberLastSurah } from './playback.svelte';
+
 export type SurahListItem = {
   nomor: number;
   nama: string;
@@ -15,6 +17,8 @@ export type Ayat = {
   teksLatin: string;
   teksIndonesia: string;
   teksEnglish?: string;
+  /** Tafsir text for this ayah, filled in by `loadTafsir`. */
+  tafsir?: string;
 };
 
 export type EnglishAyah = {
@@ -57,6 +61,7 @@ export const surahState = $state({
   selected: fallbackAlFatihah,
   query: '',
   pendingScrollAyah: 0,
+  visibleAyah: 1,
   loading: false,
   error: ''
 });
@@ -89,9 +94,7 @@ export async function selectSurah(number: number) {
   try {
     surahState.selected = await invoke<Surah>('get_surah', { number });
     void loadEnglishTranslation(number);
-    void invoke('save_settings', {
-      settings: { qari: 'misyari', lang: 'id', prefetchTts: true, volume: 70, lastSurah: number }
-    });
+    void rememberLastSurah(number);
   } catch (error) {
     surahState.error = error instanceof Error ? error.message : String(error);
     if (number === fallbackAlFatihah.nomor) {

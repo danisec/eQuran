@@ -9,6 +9,9 @@ pub struct DesktopSettings {
     pub qari: String,
     pub lang: String,
     pub prefetch_tts: bool,
+    /// Read the ayah tafsir after the translation.
+    #[serde(default)]
+    pub read_tafsir: bool,
     pub volume: u8,
     pub last_surah: u8,
 }
@@ -19,6 +22,7 @@ impl Default for DesktopSettings {
             qari: "misyari".to_owned(),
             lang: "id".to_owned(),
             prefetch_tts: true,
+            read_tafsir: false,
             volume: 70,
             last_surah: 1,
         }
@@ -28,6 +32,12 @@ impl Default for DesktopSettings {
 pub struct SettingsState {
     settings: Mutex<DesktopSettings>,
     file_path: PathBuf,
+}
+
+impl Default for SettingsState {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl SettingsState {
@@ -99,6 +109,7 @@ mod tests {
                 qari: "misyari".to_owned(),
                 lang: "id".to_owned(),
                 prefetch_tts: true,
+                read_tafsir: false,
                 volume: 70,
                 last_surah: 1,
             }

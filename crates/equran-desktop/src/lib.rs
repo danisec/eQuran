@@ -4,6 +4,7 @@ use std::path::PathBuf;
 
 use commands::bookmark::BookmarkState;
 use commands::playback::PlaybackState;
+use commands::search::SearchState;
 use commands::settings::SettingsState;
 use equran_core::api::client::ApiClient;
 use tauri::{Manager, path::BaseDirectory};
@@ -68,6 +69,7 @@ pub fn run() {
             app.manage(PlaybackState::new());
             app.manage(BookmarkState::new());
             app.manage(SettingsState::new());
+            app.manage(SearchState::new());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -79,14 +81,22 @@ pub fn run() {
             commands::settings::save_settings,
             commands::playback::start_playback,
             commands::playback::stop_playback,
+            commands::playback::pause_playback,
+            commands::playback::resume_playback,
             commands::playback::get_cache_status,
             commands::playback::set_tts_enabled,
             commands::playback::play_tafsir_voice,
-            commands::tts::get_natural_indonesian_voice_status,
-            commands::tts::install_natural_indonesian_voice,
+            commands::playback::is_tafsir_voice_active,
+            commands::playback::is_tafsir_voice_paused,
+            commands::playback::pause_tafsir_voice,
+            commands::playback::resume_tafsir_voice,
+            commands::tts::get_tts_voice_status,
             commands::bookmark::get_bookmarks,
             commands::bookmark::add_bookmark,
             commands::bookmark::remove_bookmark,
+            commands::search::search_quran,
+            commands::search::get_index_status,
+            commands::search::rebuild_index,
         ])
         .run(tauri::generate_context!())
         .expect("error while running eQuran desktop application");

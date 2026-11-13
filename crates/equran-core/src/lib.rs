@@ -2,6 +2,7 @@ pub mod api;
 pub mod audio;
 pub mod display;
 pub mod playback;
+pub mod search;
 
 pub mod domain {
     use std::str::FromStr;

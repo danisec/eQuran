@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use tokio::fs;
@@ -33,7 +33,7 @@ impl AudioCache {
             .await
             .with_context(|| format!("failed to create {}", audio_dir.display()))?;
         let target = audio_dir.join(filename);
-        if target.exists() {
+        if is_non_empty_file(&target).await {
             return Ok(target);
         }
         let bytes = api.download_bytes(url).await?;
@@ -44,52 +44,64 @@ impl AudioCache {
     }
 }
 
+/// Returns true when `path` exists and holds more than a bare file header.
+///
+/// Cached media can be left truncated by an interrupted download or synthesis.
+/// Treating such a stub as a cache hit produces silent playback for WAV files,
+/// so size is validated on every read.
+pub async fn is_non_empty_file(path: &Path) -> bool {
+    match fs::metadata(path).await {
+        Ok(metadata) => metadata.is_file() && metadata.len() > 44,
+        Err(_) => false,
+    }
+}
+
+/// Validates the canonical PCM WAV header written by the TTS engine.
+///
+/// Older engine builds could leave a WAV container that the native decoder
+/// rejects. Checking the header means such files are regenerated instead of
+/// being replayed as silence.
+pub async fn is_valid_pcm_wav(path: &Path) -> bool {
+    use tokio::io::AsyncReadExt;
+
+    let Ok(metadata) = fs::metadata(path).await else {
+        return false;
+    };
+    if !metadata.is_file() || metadata.len() < 44 {
+        return false;
+    }
+
+    let Ok(mut file) = fs::File::open(path).await else {
+        return false;
+    };
+    let mut header = [0u8; 44];
+    if file.read_exact(&mut header).await.is_err() {
+        return false;
+    }
+
+    let riff = &header[0..4] == b"RIFF";
+    let wave = &header[8..12] == b"WAVE";
+    let format = u16::from_le_bytes([header[20], header[21]]);
+    let channels = u16::from_le_bytes([header[22], header[23]]);
+    let bits_per_sample = u16::from_le_bytes([header[34], header[35]]);
+
+    riff && wave && format == 1 && channels > 0 && bits_per_sample == 16
+}
+
 pub fn audio_filename(qari_key: &str, surah: u8, ayah: u16) -> String {
     format!("{qari_key}_{surah:03}_{ayah:03}.mp3")
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum TtsBackend {
-    Wibowo,
-    EdgeTts,
+/// Every synthesized file is prefixed with the engine name so artifacts from a
+/// previous engine are never mistaken for current output.
+const TTS_PREFIX: &str = "supertonic";
+
+pub fn tts_filename(lang: &str, surah: u8, ayah: u16) -> String {
+    format!("{TTS_PREFIX}_{lang}_{surah:03}_{ayah:03}.wav")
 }
 
-impl TtsBackend {
-    pub fn prefix(self) -> &'static str {
-        match self {
-            Self::Wibowo => "wibowo",
-            Self::EdgeTts => "edge",
-        }
-    }
-
-    pub fn extension(self) -> &'static str {
-        match self {
-            Self::EdgeTts => "mp3",
-            Self::Wibowo => "wav",
-        }
-    }
-}
-
-pub fn tts_filename(backend: TtsBackend, lang: &str, surah: u8, ayah: u16) -> String {
-    format!("{}_{lang}_{surah:03}_{ayah:03}.wav", backend.prefix())
-}
-
-pub fn tafsir_tts_filename(lang: &str, surah: u8, ayah: u16) -> String {
-    format!("tafsir_edge_{lang}_{surah:03}_{ayah:03}.mp3")
-}
-
-pub fn tafsir_tts_chunk_filename(
-    backend: TtsBackend,
-    lang: &str,
-    surah: u8,
-    ayah: u16,
-    chunk: usize,
-) -> String {
-    format!(
-        "tafsir_{}_{lang}_{surah:03}_{ayah:03}_{chunk:03}.{}",
-        backend.prefix(),
-        backend.extension()
-    )
+pub fn tafsir_tts_chunk_filename(lang: &str, surah: u8, ayah: u16, chunk: usize) -> String {
+    format!("tafsir_{TTS_PREFIX}_{lang}_{surah:03}_{ayah:03}_{chunk:03}.wav")
 }
 
 #[cfg(test)]
@@ -99,21 +111,84 @@ mod tests {
     #[test]
     fn creates_stable_cache_filenames() {
         assert_eq!(audio_filename("05", 1, 7), "05_001_007.mp3");
+        assert_eq!(tts_filename("id", 1, 7), "supertonic_id_001_007.wav");
+        assert_eq!(tts_filename("en", 36, 12), "supertonic_en_036_012.wav");
         assert_eq!(
-            tts_filename(TtsBackend::Wibowo, "id", 1, 7),
-            "wibowo_id_001_007.wav"
+            tafsir_tts_chunk_filename("id", 1, 7, 2),
+            "tafsir_supertonic_id_001_007_002.wav"
         );
-        assert_eq!(
-            tts_filename(TtsBackend::EdgeTts, "en", 36, 12),
-            "edge_en_036_012.wav"
-        );
-        assert_eq!(
-            tafsir_tts_filename("id", 1, 7),
-            "tafsir_edge_id_001_007.mp3"
-        );
-        assert_eq!(
-            tafsir_tts_chunk_filename(TtsBackend::Wibowo, "id", 1, 7, 2),
-            "tafsir_wibowo_id_001_007_002.wav"
-        );
+    }
+
+    #[tokio::test]
+    async fn rejects_missing_and_truncated_files() {
+        let temp_dir = tempfile::tempdir().expect("temp dir should be created");
+
+        assert!(!is_non_empty_file(&temp_dir.path().join("missing.wav")).await);
+
+        let truncated = temp_dir.path().join("truncated.wav");
+        tokio::fs::write(&truncated, b"RIFF")
+            .await
+            .expect("file should be written");
+        assert!(!is_non_empty_file(&truncated).await);
+    }
+
+    #[tokio::test]
+    async fn accepts_complete_files() {
+        let temp_dir = tempfile::tempdir().expect("temp dir should be created");
+        let complete = temp_dir.path().join("complete.wav");
+        tokio::fs::write(&complete, vec![0u8; 128])
+            .await
+            .expect("file should be written");
+
+        assert!(is_non_empty_file(&complete).await);
+    }
+
+    fn pcm_wav_header() -> Vec<u8> {
+        let mut header = vec![0u8; 44];
+        header[0..4].copy_from_slice(b"RIFF");
+        header[4..8].copy_from_slice(&36u32.to_le_bytes());
+        header[8..12].copy_from_slice(b"WAVE");
+        header[12..16].copy_from_slice(b"fmt ");
+        header[16..20].copy_from_slice(&16u32.to_le_bytes());
+        header[20..22].copy_from_slice(&1u16.to_le_bytes());
+        header[22..24].copy_from_slice(&1u16.to_le_bytes());
+        header[24..28].copy_from_slice(&44_100u32.to_le_bytes());
+        header[34..36].copy_from_slice(&16u16.to_le_bytes());
+        header
+    }
+
+    #[tokio::test]
+    async fn accepts_pcm_wav_headers() {
+        let temp_dir = tempfile::tempdir().expect("temp dir should be created");
+        let path = temp_dir.path().join("valid.wav");
+        tokio::fs::write(&path, pcm_wav_header())
+            .await
+            .expect("file should be written");
+
+        assert!(is_valid_pcm_wav(&path).await);
+    }
+
+    #[tokio::test]
+    async fn rejects_non_pcm_wav_headers() {
+        let temp_dir = tempfile::tempdir().expect("temp dir should be created");
+        let path = temp_dir.path().join("float.wav");
+        let mut header = pcm_wav_header();
+        header[20..22].copy_from_slice(&3u16.to_le_bytes());
+        tokio::fs::write(&path, header)
+            .await
+            .expect("file should be written");
+
+        assert!(!is_valid_pcm_wav(&path).await);
+    }
+
+    #[tokio::test]
+    async fn rejects_truncated_wav_headers() {
+        let temp_dir = tempfile::tempdir().expect("temp dir should be created");
+        let path = temp_dir.path().join("short.wav");
+        tokio::fs::write(&path, b"RIFF")
+            .await
+            .expect("file should be written");
+
+        assert!(!is_valid_pcm_wav(&path).await);
     }
 }

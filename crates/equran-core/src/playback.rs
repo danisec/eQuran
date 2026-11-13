@@ -11,7 +11,7 @@ use crate::{
     },
     audio::{
         cache::{AudioCache, audio_filename},
-        player::play_audio_cancellable,
+        player::{PlaybackControl, play_audio_controlled},
         tts::TtsEngine,
     },
     display,
@@ -25,14 +25,20 @@ pub struct PlaybackEngine {
     dry_run: bool,
     prefetch_tts: bool,
     pregenerate_tts: bool,
+    /// Read the ayah tafsir after the translation.
+    read_tafsir: bool,
     tts_enabled: Arc<AtomicBool>,
     cancel_token: CancellationToken,
+    /// Shared with the command layer so the current audio can be paused and
+    /// resumed at the sample level instead of being torn down and restarted.
+    control: Arc<PlaybackControl>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PlaybackPhase {
     Recitation,
     Translation,
+    Tafsir,
     Cache,
 }
 
@@ -56,6 +62,7 @@ impl PlaybackPhase {
         match self {
             Self::Recitation => "recitation",
             Self::Translation => "translation",
+            Self::Tafsir => "tafsir",
             Self::Cache => "cache",
         }
     }
@@ -105,9 +112,17 @@ impl PlaybackEngine {
             dry_run,
             prefetch_tts,
             pregenerate_tts,
+            read_tafsir: false,
             tts_enabled: Arc::new(AtomicBool::new(true)),
             cancel_token: CancellationToken::new(),
+            control: Arc::new(PlaybackControl::new()),
         }
+    }
+
+    /// Reads the ayah tafsir after the translation when enabled.
+    pub fn with_read_tafsir(mut self, read_tafsir: bool) -> Self {
+        self.read_tafsir = read_tafsir;
+        self
     }
 
     pub fn with_project_root(mut self, project_root: std::path::PathBuf) -> Self {
@@ -132,6 +147,14 @@ impl PlaybackEngine {
 
     pub fn with_cancel_token(mut self, cancel_token: CancellationToken) -> Self {
         self.cancel_token = cancel_token;
+        self
+    }
+
+    /// Shares one pause/resume control across every clip in the session
+    /// (recitation, translation, tafsir), so the command layer can pause
+    /// whatever is sounding without knowing which phase is running.
+    pub fn with_playback_control(mut self, control: Arc<PlaybackControl>) -> Self {
+        self.control = control;
         self
     }
 
@@ -233,10 +256,11 @@ impl PlaybackEngine {
         lang: Lang,
     ) -> Result<()> {
         let total = ayat.len();
+        self.tts.ensure_ready()?;
         println!(
             "Preparing {} TTS cache with {} backend...",
             lang.code(),
-            self.tts.active_backend(lang)?.prefix()
+            self.tts.backend_name()
         );
         for (index, ayah) in ayat.iter().enumerate() {
             let translation = self.translation_for(ayah, english_surah, lang)?;
@@ -299,6 +323,37 @@ impl PlaybackEngine {
             None
         };
 
+        // The tafsir is synthesised in parallel with the recitation so its
+        // first chunk is usually ready by the time the translation ends.
+        let tafsir_text = self
+            .read_tafsir
+            .then_some(ayah.tafsir.as_deref())
+            .flatten()
+            .map(str::trim)
+            .filter(|text| !text.is_empty())
+            .map(str::to_owned);
+
+        let tafsir_handle = tafsir_text.as_ref().map(|text| {
+            let chunks = TtsEngine::split_tafsir_text(text);
+            let tts = self.tts.clone();
+            let ayah_number = ayah.nomor_ayat;
+            tokio::spawn(async move {
+                let mut paths = Vec::with_capacity(chunks.len());
+                for (index, chunk) in chunks.iter().enumerate() {
+                    paths.push(
+                        tts.synthesize_tafsir_chunk_cached(
+                            chunk,
+                            surah_number,
+                            ayah_number,
+                            index + 1,
+                        )
+                        .await?,
+                    );
+                }
+                Ok::<_, anyhow::Error>(paths)
+            })
+        });
+
         let prefetch_handle = if tts_generation_plan.next_ayah {
             let next = next_ayah.expect("next ayah exists when prefetch is planned");
             let next_translation = self.translation_for(next, english_surah, lang)?.to_owned();
@@ -331,7 +386,7 @@ impl PlaybackEngine {
                 &audio_filename(qari.key(), surah_number, ayah.nomor_ayat),
             )
             .await?;
-        play_audio_cancellable(&audio_path, &self.cancel_token).await?;
+        play_audio_controlled(&audio_path, &self.cancel_token, &self.control).await?;
 
         if self.cancel_token.is_cancelled() {
             return Ok(());
@@ -363,7 +418,7 @@ impl PlaybackEngine {
                 current,
                 total,
             );
-            play_audio_cancellable(&tts_path, &self.cancel_token)
+            play_audio_controlled(&tts_path, &self.cancel_token, &self.control)
                 .await
                 .or_else(|error| {
                     bail!(
@@ -371,6 +426,40 @@ impl PlaybackEngine {
                         tts_path.display()
                     )
                 })?;
+        }
+
+        if let Some(handle) = tafsir_handle {
+            if self.cancel_token.is_cancelled() {
+                handle.abort();
+                return Ok(());
+            }
+
+            self.emit_event(
+                on_event,
+                surah_number,
+                ayah.nomor_ayat,
+                PlaybackPhase::Tafsir,
+                current,
+                total,
+            );
+
+            let chunk_paths = handle
+                .await
+                .context("tafsir TTS generation task was cancelled")??;
+
+            for chunk_path in chunk_paths {
+                if self.cancel_token.is_cancelled() {
+                    return Ok(());
+                }
+                play_audio_controlled(&chunk_path, &self.cancel_token, &self.control)
+                    .await
+                    .with_context(|| {
+                        format!(
+                            "failed to play generated tafsir audio {}",
+                            chunk_path.display()
+                        )
+                    })?;
+            }
         }
 
         if let Some(handle) = prefetch_handle {
@@ -410,9 +499,17 @@ impl PlaybackEngine {
     ) -> Result<&'a str> {
         match lang {
             Lang::Id => Ok(ayah.teks_indonesia.as_str()),
-            Lang::En => english_surah
-                .and_then(|surah| surah.translation_for_ayah(ayah.nomor_ayat))
-                .context("English translation was requested but English surah data is missing"),
+            // The English API only ships the verse translation, which is a
+            // single sentence. Reading the tafsir gives English listeners the
+            // same depth Indonesian listeners get from `teksIndonesia`.
+            Lang::En => ayah
+                .tafsir
+                .as_deref()
+                .filter(|tafsir| !tafsir.trim().is_empty())
+                .or_else(|| {
+                    english_surah.and_then(|surah| surah.translation_for_ayah(ayah.nomor_ayat))
+                })
+                .context("English translation was requested but no English text is available"),
         }
     }
 }
@@ -425,6 +522,7 @@ mod tests {
     };
 
     use super::*;
+    use crate::api::models::EnglishAyah;
 
     fn ayah(number: u16) -> Ayat {
         Ayat {
@@ -432,6 +530,7 @@ mod tests {
             teks_arab: format!("arab {number}"),
             teks_latin: format!("latin {number}"),
             teks_indonesia: format!("id {number}"),
+            tafsir: None,
             audio: HashMap::from([(
                 "05".to_owned(),
                 format!("https://example.test/{number}.mp3"),
@@ -490,10 +589,78 @@ mod tests {
     }
 
     #[test]
+    fn tafsir_phase_has_a_stable_wire_name() {
+        assert_eq!(PlaybackPhase::Tafsir.as_str(), "tafsir");
+    }
+
+    #[test]
+    fn read_tafsir_is_opt_in() {
+        let engine = PlaybackEngine::new(
+            ApiClient::new().unwrap(),
+            AudioCache::new().unwrap(),
+            true,
+            false,
+            false,
+        );
+
+        assert!(!engine.read_tafsir);
+        assert!(engine.with_read_tafsir(true).read_tafsir);
+    }
+
+    #[test]
     fn plans_current_tts_generation_during_recitation_when_translation_enabled() {
         let plan = TtsGenerationPlan::new(true, true, true);
 
         assert!(plan.current_ayah);
         assert!(plan.next_ayah);
+    }
+
+    #[test]
+    fn english_translation_prefers_tafsir_over_verse_translation() {
+        let engine = PlaybackEngine::new(
+            ApiClient::new().unwrap(),
+            AudioCache::new().unwrap(),
+            true,
+            false,
+            false,
+        );
+        let mut ayah = ayah(1);
+        ayah.tafsir = Some("Tafsir panjang untuk ayat satu".to_owned());
+        let english = EnglishSurah {
+            ayahs: vec![EnglishAyah {
+                number_in_surah: 1,
+                text_english: "Short verse translation".to_owned(),
+            }],
+        };
+
+        let text = engine
+            .translation_for(&ayah, Some(&english), Lang::En)
+            .expect("English text should resolve");
+
+        assert_eq!(text, "Tafsir panjang untuk ayat satu");
+    }
+
+    #[test]
+    fn english_translation_falls_back_to_verse_translation_without_tafsir() {
+        let engine = PlaybackEngine::new(
+            ApiClient::new().unwrap(),
+            AudioCache::new().unwrap(),
+            true,
+            false,
+            false,
+        );
+        let ayah = ayah(1);
+        let english = EnglishSurah {
+            ayahs: vec![EnglishAyah {
+                number_in_surah: 1,
+                text_english: "Short verse translation".to_owned(),
+            }],
+        };
+
+        let text = engine
+            .translation_for(&ayah, Some(&english), Lang::En)
+            .expect("English text should resolve");
+
+        assert_eq!(text, "Short verse translation");
     }
 }

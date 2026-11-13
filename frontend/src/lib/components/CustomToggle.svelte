@@ -3,15 +3,18 @@
     label,
     description,
     checked,
+    disabled = false,
     onChange
   }: {
     label: string;
     description?: string;
     checked: boolean;
+    disabled?: boolean;
     onChange: (checked: boolean) => void;
   } = $props();
 
   function toggle() {
+    if (disabled) return;
     onChange(!checked);
   }
 </script>
@@ -20,8 +23,10 @@
   type="button"
   class="custom-toggle"
   class:checked
+  class:disabled
   role="switch"
   aria-checked={checked}
+  aria-disabled={disabled}
   aria-label={label}
   onclick={toggle}
 >

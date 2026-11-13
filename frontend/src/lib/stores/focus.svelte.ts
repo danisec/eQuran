@@ -1,4 +1,5 @@
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { surahState } from './surah.svelte';
 
 export const focusState = $state({
   enabled: false,
@@ -28,6 +29,7 @@ export function enableFocusMode() {
 }
 
 export function disableFocusMode() {
+  surahState.pendingScrollAyah = focusState.selectedAyah;
   focusState.enabled = false;
   void setWindowFullscreen(false);
 }
