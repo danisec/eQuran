@@ -4,8 +4,8 @@
   "version": "1.0.0",
   "identifier": "id.equran.desktop",
   "build": {
-    "beforeDevCommand": "npm --prefix /home/dani/equran-cli/frontend run dev -- --host 127.0.0.1",
-    "beforeBuildCommand": "npm --prefix /home/dani/equran-cli/frontend run build",
+    "beforeDevCommand": "npm --prefix ../../frontend run dev -- --host 127.0.0.1",
+    "beforeBuildCommand": "npm --prefix ../../frontend run build",
     "devUrl": "http://127.0.0.1:5173",
     "frontendDist": "../../frontend/build"
   },
