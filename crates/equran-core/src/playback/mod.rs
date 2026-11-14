@@ -337,13 +337,7 @@ impl PlaybackEngine {
         });
         // The tafsir is synthesised in parallel with the recitation so its
         // first chunk is usually ready by the time the translation ends.
-        // English already reads the tafsir as its translation, so reading it
-        // again in the tafsir phase would narrate the same commentary twice.
-        let tafsir_task = if request.lang == Lang::En && plan.current_ayah {
-            None
-        } else {
-            self.spawn_tafsir_tts(&request)
-        };
+        let tafsir_task = self.spawn_tafsir_tts(&request);
         let prefetch_task = self.spawn_prefetch_tts(&request, plan)?;
 
         if self.cancel_token.is_cancelled() {
@@ -636,15 +630,17 @@ impl PlaybackEngine {
     ) -> Result<&'a str> {
         match lang {
             Lang::Id => Ok(ayah.teks_indonesia.as_str()),
-            // The English API only ships the verse translation, which is a
-            // single sentence. Reading the tafsir gives English listeners the
-            // same depth Indonesian listeners get from `teksIndonesia`.
-            Lang::En => ayah
-                .tafsir
-                .as_deref()
-                .filter(|tafsir| !tafsir.trim().is_empty())
+            // English narrates the verse translation first, exactly like
+            // Indonesian. The tafsir is a separate phase and is only read when
+            // "Read tafsir" is on; feeding the commentary into the translation
+            // phase made the ayah meaning disappear from playback.
+            Lang::En => english_surah
+                .and_then(|surah| surah.translation_for_ayah(ayah.nomor_ayat))
+                .filter(|translation| !translation.trim().is_empty())
                 .or_else(|| {
-                    english_surah.and_then(|surah| surah.translation_for_ayah(ayah.nomor_ayat))
+                    ayah.tafsir
+                        .as_deref()
+                        .filter(|tafsir| !tafsir.trim().is_empty())
                 })
                 .context("English translation was requested but no English text is available"),
         }

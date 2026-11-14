@@ -171,12 +171,11 @@ async fn prepare_session(
         None
     };
 
-    // Tafsir is needed for English playback (which reads it as the deeper
-    // translation) and for the optional "read tafsir" mode. English uses
-    // UmmahAPI commentary, Indonesian keeps quran-api-id. A failure here is not
-    // fatal: English playback falls back to the verse translation and tafsir
-    // narration is skipped.
-    if lang == Lang::En || read_tafsir {
+    // Tafsir is only needed when "Read tafsir" is on. English narration reads
+    // the verse translation first and continues into this commentary, which is
+    // why it uses UmmahAPI here while Indonesian keeps quran-api-id. A failure
+    // is not fatal: tafsir narration is simply skipped.
+    if read_tafsir {
         match api.fetch_tafsir(request.surah_number, lang).await {
             Ok(tafsir) => {
                 for ayah in &mut surah.ayat {

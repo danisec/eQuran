@@ -98,7 +98,7 @@ fn plans_current_tts_generation_during_recitation_when_translation_enabled() {
 }
 
 #[test]
-fn english_translation_prefers_tafsir_over_verse_translation() {
+fn english_translation_prefers_verse_translation_over_tafsir() {
     let engine = PlaybackEngine::new(
         ApiClient::new().unwrap(),
         AudioCache::new().unwrap(),
@@ -107,31 +107,7 @@ fn english_translation_prefers_tafsir_over_verse_translation() {
         false,
     );
     let mut ayah = ayah(1);
-    ayah.tafsir = Some("Tafsir panjang untuk ayat satu".to_owned());
-    let english = EnglishSurah {
-        ayahs: vec![EnglishAyah {
-            number_in_surah: 1,
-            text_english: "Short verse translation".to_owned(),
-        }],
-    };
-
-    let text = engine
-        .translation_for(&ayah, Some(&english), Lang::En)
-        .expect("English text should resolve");
-
-    assert_eq!(text, "Tafsir panjang untuk ayat satu");
-}
-
-#[test]
-fn english_translation_falls_back_to_verse_translation_without_tafsir() {
-    let engine = PlaybackEngine::new(
-        ApiClient::new().unwrap(),
-        AudioCache::new().unwrap(),
-        true,
-        false,
-        false,
-    );
-    let ayah = ayah(1);
+    ayah.tafsir = Some("Long tafsir for ayah one".to_owned());
     let english = EnglishSurah {
         ayahs: vec![EnglishAyah {
             number_in_surah: 1,
@@ -144,4 +120,29 @@ fn english_translation_falls_back_to_verse_translation_without_tafsir() {
         .expect("English text should resolve");
 
     assert_eq!(text, "Short verse translation");
+}
+
+#[test]
+fn english_translation_falls_back_to_tafsir_without_verse_translation() {
+    let engine = PlaybackEngine::new(
+        ApiClient::new().unwrap(),
+        AudioCache::new().unwrap(),
+        true,
+        false,
+        false,
+    );
+    let mut ayah = ayah(1);
+    ayah.tafsir = Some("Long tafsir for ayah one".to_owned());
+    let english = EnglishSurah {
+        ayahs: vec![EnglishAyah {
+            number_in_surah: 2,
+            text_english: "Translation of another ayah".to_owned(),
+        }],
+    };
+
+    let text = engine
+        .translation_for(&ayah, Some(&english), Lang::En)
+        .expect("English text should resolve");
+
+    assert_eq!(text, "Long tafsir for ayah one");
 }

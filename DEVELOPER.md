@@ -131,10 +131,12 @@ di-cache per interpreter agar tidak dijalankan berulang kali.
 ### English
 
 Supertonic 3 multilingual, voice yang sama dengan Bahasa Indonesia.
-Teks yang dibacakan untuk `lang = en` adalah **tafsir Inggris** ayat dari
-[UmmahAPI](https://ummahapi.com/api/docs) (sumber `maarif`), bukan terjemahan
-satu kalimat dari API English. Tafsir diambil sekali per surah saat playback
-dimulai; jika gagal, engine jatuh ke `textEnglish` dari `equran.id/api/en`.
+Teks yang dibacakan untuk `lang = en` mengikuti urutan yang sama dengan bahasa
+Indonesia: **terjemahan ayat** dari [equran.id/api/en](https://equran.id/api/en)
+(`textEnglish`), lalu **tafsir Inggris** dari
+[UmmahAPI](https://ummahapi.com/api/docs) (sumber `maarif`) bila opsi
+"Bacakan tafsir" aktif. Tafsir hanya diambil saat opsi itu menyala; tanpa
+tafsir, narasi berhenti setelah terjemahan ayat dan tidak jatuh ke teks lain.
 Panel tafsir memakai sumber yang sama saat bahasa antarmuka Inggris, sedangkan
 bahasa Indonesia tetap memakai `quran-api-id.vercel.app`. UmmahAPI mengirim
 komentar sebagai satu string tanpa baris baru, jadi panel menyusun ulang
