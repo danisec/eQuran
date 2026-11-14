@@ -1,9 +1,45 @@
 use std::path::{Path, PathBuf};
+use std::time::{Duration, SystemTime};
 
 use anyhow::{Context, Result};
 use tokio::fs;
 
 use crate::api::client::ApiClient;
+
+/// Default cap for cached media (qari recitation and synthesized narration), in
+/// megabytes.
+///
+/// Narration is uncompressed PCM WAV at roughly 88 KB per second, and one ayah's
+/// tafsir can run to tens of megabytes, so an unbounded cache fills a disk after
+/// a single pass through a long surah. The cache keeps a working set instead and
+/// discards the least recently used files past this cap. Override with
+/// `EQURAN_TTS_CACHE_LIMIT_MB`; `0` turns the cap off.
+pub const DEFAULT_MEDIA_LIMIT_MB: u64 = 2048;
+
+/// Age past which a `.part` file cannot belong to a live synthesis.
+///
+/// Synthesis renders into a `.part` sibling and renames it into place, so a
+/// leftover is always a crash artifact. The worker request itself times out
+/// after 300 s, hence any file older than this grace period is safe to delete.
+pub const ORPHAN_PART_MAX_AGE: Duration = Duration::from_secs(600);
+
+/// What the media cache currently occupies on disk.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct CacheUsage {
+    pub total_bytes: u64,
+    pub file_count: usize,
+    pub qari_bytes: u64,
+    pub translation_bytes: u64,
+    pub tafsir_bytes: u64,
+}
+
+/// Result of one maintenance pass, so the caller can report what happened.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct CacheMaintenance {
+    pub orphan_parts_removed: usize,
+    pub files_removed: usize,
+    pub bytes_freed: u64,
+}
 
 #[derive(Clone)]
 pub struct AudioCache {
@@ -20,6 +56,13 @@ impl AudioCache {
 
     pub fn root(&self) -> &PathBuf {
         &self.root
+    }
+
+    /// Builds a cache rooted at `root` instead of the user cache directory.
+    /// Used by tests; production code always goes through [`AudioCache::new`].
+    #[cfg(test)]
+    fn with_root(root: PathBuf) -> Self {
+        Self { root }
     }
 
     pub async fn get_or_download(
@@ -42,6 +85,191 @@ impl AudioCache {
             .with_context(|| format!("failed to write {}", target.display()))?;
         Ok(target)
     }
+
+    /// Sums what the media cache occupies, split by kind.
+    ///
+    /// Only the two media directories are counted (`audio/` for downloaded
+    /// recitation, `tts/` for synthesized narration); the search index has its
+    /// own lifecycle and is left out so "clear cache" never rebuilds it.
+    pub async fn usage(&self) -> CacheUsage {
+        let mut usage = CacheUsage::default();
+        for entry in self.media_entries().await {
+            usage.total_bytes += entry.bytes;
+            usage.file_count += 1;
+            match entry.kind {
+                MediaKind::Qari => usage.qari_bytes += entry.bytes,
+                MediaKind::Translation => usage.translation_bytes += entry.bytes,
+                MediaKind::Tafsir => usage.tafsir_bytes += entry.bytes,
+            }
+        }
+        usage
+    }
+
+    /// Keeps the media cache inside its cap and removes crash leftovers.
+    ///
+    /// Narration is the only part that grows without bound, so this runs at
+    /// startup and never while a clip is playing: it deletes the least recently
+    /// used files (oldest mtime first) until the total is back under the cap.
+    /// A zeroed report means there was nothing to do; failures to remove an
+    /// individual file are ignored, since a file that will not delete is not
+    /// worth failing startup over.
+    pub async fn prune(&self) -> CacheMaintenance {
+        self.prune_to(media_limit_bytes()).await
+    }
+
+    /// [`prune`](Self::prune) with an explicit cap, so tests never depend on
+    /// process environment.
+    async fn prune_to(&self, limit: Option<u64>) -> CacheMaintenance {
+        let mut report = CacheMaintenance::default();
+
+        // A `.part` file is a synthesis that never finished. Delete the ones old
+        // enough that no live request can still own them.
+        let cutoff = SystemTime::now()
+            .checked_sub(ORPHAN_PART_MAX_AGE)
+            .unwrap_or(SystemTime::UNIX_EPOCH);
+        for entry in self.all_dir_entries().await {
+            if !entry.is_part || entry.modified > cutoff {
+                continue;
+            }
+            if fs::remove_file(&entry.path).await.is_ok() {
+                report.orphan_parts_removed += 1;
+                report.bytes_freed += entry.bytes;
+            }
+        }
+
+        let Some(limit) = limit else {
+            return report;
+        };
+
+        // Leftovers are gone, so the media list is accurate for the cap check.
+        let mut entries = self.media_entries().await;
+        let mut total: u64 = entries.iter().map(|entry| entry.bytes).sum();
+        if total <= limit {
+            return report;
+        }
+
+        // Oldest first: the file nobody touched for the longest is the safest
+        // to drop, and re-synthesising it is a few seconds of CPU.
+        entries.sort_by_key(|entry| entry.modified);
+        for entry in entries {
+            if total <= limit {
+                break;
+            }
+            if fs::remove_file(&entry.path).await.is_ok() {
+                total = total.saturating_sub(entry.bytes);
+                report.files_removed += 1;
+                report.bytes_freed += entry.bytes;
+            }
+        }
+        report
+    }
+
+    /// Removes every cached media file, leaving the search index alone.
+    pub async fn clear_media(&self) -> CacheMaintenance {
+        let mut report = CacheMaintenance::default();
+        for entry in self.all_dir_entries().await {
+            if fs::remove_file(&entry.path).await.is_ok() {
+                report.files_removed += 1;
+                report.bytes_freed += entry.bytes;
+            }
+        }
+        report
+    }
+
+    /// Media files that count toward the cap, with the metadata a prune needs.
+    async fn media_entries(&self) -> Vec<MediaEntry> {
+        let mut entries = Vec::new();
+        for (dir, default_kind) in [
+            (self.root.join("audio"), MediaKind::Qari),
+            (self.root.join("tts"), MediaKind::Translation),
+        ] {
+            for entry in read_dir_entries(&dir).await {
+                if entry.is_part {
+                    continue;
+                }
+                entries.push(MediaEntry {
+                    kind: media_kind(&entry.name, default_kind),
+                    ..entry
+                });
+            }
+        }
+        entries
+    }
+
+    /// Every file in the media directories, including `.part` leftovers.
+    async fn all_dir_entries(&self) -> Vec<MediaEntry> {
+        let mut entries = Vec::new();
+        for dir in [self.root.join("audio"), self.root.join("tts")] {
+            entries.extend(read_dir_entries(&dir).await);
+        }
+        entries
+    }
+}
+
+/// Which narration a cached file holds, for the usage breakdown.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum MediaKind {
+    Qari,
+    Translation,
+    Tafsir,
+}
+
+struct MediaEntry {
+    path: PathBuf,
+    name: String,
+    bytes: u64,
+    modified: SystemTime,
+    is_part: bool,
+    kind: MediaKind,
+}
+
+/// Classifies a cache filename by the prefix the engine writes.
+fn media_kind(name: &str, default: MediaKind) -> MediaKind {
+    if name.starts_with("translation_") {
+        MediaKind::Translation
+    } else if name.starts_with("tafsir_") {
+        MediaKind::Tafsir
+    } else {
+        default
+    }
+}
+
+async fn read_dir_entries(dir: &Path) -> Vec<MediaEntry> {
+    let Ok(mut reader) = fs::read_dir(dir).await else {
+        return Vec::new();
+    };
+    let mut entries = Vec::new();
+    while let Ok(Some(entry)) = reader.next_entry().await {
+        let name = entry.file_name().to_string_lossy().into_owned();
+        let Ok(metadata) = entry.metadata().await else {
+            continue;
+        };
+        if !metadata.is_file() {
+            continue;
+        }
+        entries.push(MediaEntry {
+            path: entry.path(),
+            is_part: name.ends_with(".part"),
+            bytes: metadata.len(),
+            modified: metadata.modified().unwrap_or(SystemTime::UNIX_EPOCH),
+            kind: MediaKind::Qari,
+            name,
+        });
+    }
+    entries
+}
+
+/// The media cap in bytes, from `EQURAN_TTS_CACHE_LIMIT_MB`.
+///
+/// `None` disables pruning; an unparseable value falls back to the default, so a
+/// typo never silently turns the cap off. `0` is a deliberate "no cap".
+pub fn media_limit_bytes() -> Option<u64> {
+    if let Ok(raw) = std::env::var("EQURAN_TTS_CACHE_LIMIT_MB")
+        && let Ok(mb) = raw.trim().parse::<u64>()
+    {
+        return (mb > 0).then(|| mb.saturating_mul(1024 * 1024));
+    }
+    Some(DEFAULT_MEDIA_LIMIT_MB * 1024 * 1024)
 }
 
 /// Returns true when `path` exists and holds more than a bare file header.
@@ -251,5 +479,143 @@ mod tests {
             .expect("file should be written");
 
         assert!(!is_valid_pcm_wav(&path).await);
+    }
+
+    async fn write_media(cache: &AudioCache, dir: &str, name: &str, bytes: usize) {
+        let path = cache.root.join(dir).join(name);
+        tokio::fs::create_dir_all(path.parent().unwrap())
+            .await
+            .expect("media dir should be created");
+        tokio::fs::write(&path, vec![0u8; bytes])
+            .await
+            .expect("media file should be written");
+    }
+
+    #[tokio::test]
+    async fn usage_counts_media_by_kind_and_skips_part_files() {
+        let temp_dir = tempfile::tempdir().expect("temp dir should be created");
+        let cache = AudioCache::with_root(temp_dir.path().to_path_buf());
+
+        write_media(&cache, "audio", "05_001_001.mp3", 100).await;
+        write_media(
+            &cache,
+            "tts",
+            "translation_supertonic_en_001_002_001_x.wav",
+            200,
+        )
+        .await;
+        write_media(&cache, "tts", "tafsir_supertonic_en_001_002_001_x.wav", 300).await;
+        write_media(&cache, "tts", "supertonic_id_001_002.wav", 400).await;
+        // A leftover render must not count as stored media.
+        write_media(&cache, "tts", "supertonic_en_001_001.123.4.part", 900).await;
+
+        let usage = cache.usage().await;
+
+        assert_eq!(usage.file_count, 4);
+        assert_eq!(usage.total_bytes, 1000);
+        assert_eq!(usage.qari_bytes, 100);
+        assert_eq!(usage.translation_bytes, 600);
+        assert_eq!(usage.tafsir_bytes, 300);
+    }
+
+    #[tokio::test]
+    async fn prunes_least_recently_used_files_down_to_the_cap() {
+        let temp_dir = tempfile::tempdir().expect("temp dir should be created");
+        let cache = AudioCache::with_root(temp_dir.path().to_path_buf());
+
+        write_media(&cache, "tts", "translation_a_001_001_001_x.wav", 400).await;
+        write_media(&cache, "tts", "translation_b_001_002_001_x.wav", 400).await;
+        write_media(&cache, "tts", "translation_c_001_003_001_x.wav", 400).await;
+
+        // Age the three files so the eviction order is deterministic: `a` is
+        // oldest and `c` is newest.
+        let set_age = |name: &str, secs: u64| {
+            let path = cache.root.join("tts").join(name);
+            let mtime = SystemTime::now() - Duration::from_secs(secs);
+            let file = std::fs::File::options()
+                .write(true)
+                .open(&path)
+                .expect("file should open");
+            file.set_modified(mtime).expect("mtime should be set");
+        };
+        set_age("translation_a_001_001_001_x.wav", 300);
+        set_age("translation_b_001_002_001_x.wav", 200);
+        set_age("translation_c_001_003_001_x.wav", 100);
+
+        // Cap of 800 B keeps two of the three 400 B files: the oldest goes.
+        let report = cache.prune_to(Some(800)).await;
+
+        assert_eq!(report.files_removed, 1);
+        assert_eq!(report.bytes_freed, 400);
+        let usage = cache.usage().await;
+        assert_eq!(usage.total_bytes, 800);
+        assert!(
+            !cache
+                .root
+                .join("tts/translation_a_001_001_001_x.wav")
+                .exists()
+        );
+        assert!(
+            cache
+                .root
+                .join("tts/translation_b_001_002_001_x.wav")
+                .exists()
+        );
+        assert!(
+            cache
+                .root
+                .join("tts/translation_c_001_003_001_x.wav")
+                .exists()
+        );
+    }
+
+    #[tokio::test]
+    async fn prune_removes_only_old_orphan_part_files() {
+        let temp_dir = tempfile::tempdir().expect("temp dir should be created");
+        let cache = AudioCache::with_root(temp_dir.path().to_path_buf());
+
+        write_media(&cache, "tts", "supertonic_en_001_001.111.0.part", 500).await;
+        write_media(&cache, "tts", "supertonic_en_001_002.222.1.part", 500).await;
+
+        // The old leftover is removed; a fresh one may belong to a live render.
+        let old = cache.root.join("tts/supertonic_en_001_001.111.0.part");
+        std::fs::File::options()
+            .write(true)
+            .open(&old)
+            .expect("file should open")
+            .set_modified(SystemTime::now() - Duration::from_secs(3600))
+            .expect("mtime should be set");
+
+        // No cap, so only the orphan sweep runs.
+        let report = cache.prune_to(None).await;
+
+        assert_eq!(report.orphan_parts_removed, 1);
+        assert_eq!(report.bytes_freed, 500);
+        assert!(!old.exists());
+        assert!(
+            cache
+                .root
+                .join("tts/supertonic_en_001_002.222.1.part")
+                .exists()
+        );
+    }
+
+    #[tokio::test]
+    async fn clear_media_removes_everything_but_keeps_other_directories() {
+        let temp_dir = tempfile::tempdir().expect("temp dir should be created");
+        let cache = AudioCache::with_root(temp_dir.path().to_path_buf());
+
+        write_media(&cache, "audio", "05_001_001.mp3", 100).await;
+        write_media(&cache, "tts", "tafsir_supertonic_en_001_002_001_x.wav", 200).await;
+        write_media(&cache, "tts", "supertonic_en_001_002.222.1.part", 50).await;
+        // The search index shares the cache root but not the media lifecycle.
+        write_media(&cache, "index", "quran-index.json", 1024).await;
+
+        let report = cache.clear_media().await;
+
+        assert_eq!(report.files_removed, 3);
+        assert_eq!(report.bytes_freed, 350);
+        assert_eq!(cache.usage().await.total_bytes, 0);
+        assert!(cache.root.join("index/quran-index.json").exists());
     }
 }

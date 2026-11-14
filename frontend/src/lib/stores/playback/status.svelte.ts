@@ -61,6 +61,55 @@ export async function refreshCacheStatus(
   }
 }
 
+type CacheUsagePayload = {
+  totalBytes: number;
+  fileCount: number;
+  qariBytes: number;
+  translationBytes: number;
+  tafsirBytes: number;
+  limitBytes: number | null;
+};
+
+/**
+ * Reads what the media cache holds on disk and against what cap.
+ *
+ * The qari progress bar answers "is this surah ready?"; this answers "how much
+ * disk is the narration using?", which is what the storage control needs.
+ */
+export async function refreshCacheUsage() {
+  try {
+    const result = await invoke<CacheUsagePayload>('get_cache_usage');
+    applyCacheUsage(result);
+  } catch {
+    playbackState.cacheUsageBytes = 0;
+    playbackState.cacheLimitBytes = null;
+    playbackState.cacheFileCount = 0;
+  }
+}
+
+/**
+ * Empties the media cache. Returns an error message when playback is running,
+ * so the caller can show why it did nothing.
+ */
+export async function clearCache(): Promise<string> {
+  try {
+    const result = await invoke<CacheUsagePayload>('clear_cache');
+    applyCacheUsage(result);
+    return '';
+  } catch (error) {
+    return readableError(error, 'Unable to clear the audio cache.');
+  }
+}
+
+function applyCacheUsage(result: CacheUsagePayload) {
+  playbackState.cacheUsageBytes = result.totalBytes;
+  playbackState.cacheLimitBytes = result.limitBytes;
+  playbackState.cacheFileCount = result.fileCount;
+  playbackState.cacheQariBytes = result.qariBytes;
+  playbackState.cacheTranslationBytes = result.translationBytes;
+  playbackState.cacheTafsirBytes = result.tafsirBytes;
+}
+
 function applyTtsVoiceStatus(result: TtsVoiceStatusPayload) {
   playbackState.ttsVoiceStatus = result.ready ? 'ready' : (result.status as TtsVoiceStatus);
   playbackState.ttsVoiceMessage = result.message;

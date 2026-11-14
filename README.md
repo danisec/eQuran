@@ -180,6 +180,13 @@ Downloaded audio is stored at:
 
 Cached files enable offline playback without re-downloading.
 
+Narration is uncompressed WAV at roughly 88 KB per second, so the cache is kept
+inside a cap instead of growing without bound. When it passes the cap the least
+recently used files are removed at startup, and crash leftovers (`.part` files
+from an interrupted render) are deleted with them. The cap defaults to 2 GB;
+override it with `EQURAN_TTS_CACHE_LIMIT_MB` (`0` turns the cap off). Settings →
+Advanced shows what the cache holds and has a Clear cache button.
+
 ## Help
 
 To view all available options:

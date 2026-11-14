@@ -7,6 +7,7 @@ use commands::playback::PlaybackState;
 use commands::search::SearchState;
 use commands::settings::SettingsState;
 use equran_core::api::client::ApiClient;
+use equran_core::audio::cache::AudioCache;
 use tauri::{Manager, path::BaseDirectory};
 
 #[derive(Clone)]
@@ -76,6 +77,20 @@ pub fn run() {
             app.manage(BookmarkState::new());
             app.manage(SettingsState::new());
             app.manage(SearchState::new());
+
+            // Reclaim disk before the first clip, on a worker so the window opens
+            // without waiting on a directory walk over a large cache.
+            tauri::async_runtime::spawn(async {
+                if let Ok(cache) = AudioCache::new() {
+                    let report = cache.prune().await;
+                    if report.orphan_parts_removed > 0 || report.files_removed > 0 {
+                        eprintln!(
+                            "cache pruned: {} leftover renders, {} files, {} bytes reclaimed",
+                            report.orphan_parts_removed, report.files_removed, report.bytes_freed
+                        );
+                    }
+                }
+            });
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -90,6 +105,8 @@ pub fn run() {
             commands::playback::pause_playback,
             commands::playback::resume_playback,
             commands::playback::get_cache_status,
+            commands::playback::get_cache_usage,
+            commands::playback::clear_cache,
             commands::playback::set_tts_enabled,
             commands::tafsir_voice::play_tafsir_voice,
             commands::tafsir_voice::is_tafsir_voice_active,

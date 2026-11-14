@@ -171,6 +171,33 @@ File TTS ditulis ke file `.part` unik lalu di-rename secara atomik, sehingga
 sintesis yang gagal atau timeout tidak meninggalkan cache yang rusak. Cache
 dianggap valid hanya jika ukurannya lebih dari 44 byte (header WAV).
 
+### Pruning dan Batas Ukuran
+
+Narasi adalah satu-satunya bagian yang tumbuh tanpa batas (WAV PCM ~88 KB per
+detik, tafsir satu ayat bisa puluhan MB), jadi media dijaga di dalam batas
+ukuran bukannya dibiarkan mengisi disk. Saat aplikasi desktop start,
+`AudioCache::prune` berjalan di worker (tidak menahan pembukaan jendela):
+
+1. **Sweep `.part` yatim** — file `.part` yang lebih tua dari 10 menit
+   (`ORPHAN_PART_MAX_AGE`) dihapus; request synthesis sendiri timeout di 300 s,
+   jadi tidak ada render hidup yang bisa memilikinya.
+2. **Evict LRU ke batas** — bila total media melewati cap, file dihapus dari
+   mtime terlama sampai di bawah cap. Cache menggunakan file terbaru sebagai
+   working set dan menyintesis ulang yang lama saat dibutuhkan.
+
+Cap default 2 GB, diatur lewat `EQURAN_TTS_CACHE_LIMIT_MB` (`0` = tanpa cap).
+Index pencarian (`index/quran-index.json`) tidak ikut dihitung maupun dihapus:
+ia punya siklus hidup sendiri. Operasi destruktif (prune, clear) hanya berjalan
+saat tidak ada sesi aktif (`PlaybackState::is_active`), agar tidak menghapus
+file yang sedang dibaca audio thread.
+
+### Storage di UI
+
+Settings → Advanced menampilkan ledger penyimpanan: total terpakai vs cap, jumlah
+berkas, rincian per jenis (Qari, Terjemahan, Tafsir), plus tombol **Kosongkan
+cache**. Angka diambil dari command `get_cache_usage`; tombol memanggil
+`clear_cache` yang menolak berjalan selagi playback aktif.
+
 ### Prefetch Behavior
 
 Secara default, playback langsung mulai dan TTS ayat berikutnya di-prefetch di background untuk seamless playback.

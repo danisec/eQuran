@@ -3,7 +3,10 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use equran_core::{
     api::models::{EnglishSurah, Surah},
-    audio::{cache::AudioCache, player::PlaybackControl},
+    audio::{
+        cache::{AudioCache, media_limit_bytes},
+        player::PlaybackControl,
+    },
     domain::{Lang, Qari},
     playback::{AyahSelection, PlaybackEngine, PlaybackEvent},
 };
@@ -45,6 +48,11 @@ pub struct PlaybackState {
     pub(crate) tafsir_control: Arc<PlaybackControl>,
     /// The recitation's own pause/resume flag, shared with the engine.
     pub(crate) playback_control: Arc<PlaybackControl>,
+    /// True while a session owns the audio device (playing or paused).
+    ///
+    /// The cancel token cannot answer this: it is live before any playback has
+    /// started, so maintenance that must not run mid-session needs its own flag.
+    pub(crate) session_active: Arc<AtomicBool>,
 }
 
 impl Default for PlaybackState {
@@ -62,7 +70,18 @@ impl PlaybackState {
             tafsir_voice_paused: Arc::new(AtomicBool::new(false)),
             tafsir_control: Arc::new(PlaybackControl::new()),
             playback_control: Arc::new(PlaybackControl::new()),
+            session_active: Arc::new(AtomicBool::new(false)),
         }
+    }
+
+    /// True while a session is playing or paused, which is when the media cache
+    /// must not be modified.
+    ///
+    /// The standalone tafsir voice is a separate stream but reads the same
+    /// cached audio, so it counts as active too.
+    pub fn is_active(&self) -> bool {
+        self.session_active.load(Ordering::Relaxed)
+            || self.tafsir_voice_active.load(Ordering::Relaxed)
     }
 }
 
@@ -122,7 +141,16 @@ pub async fn start_playback(
     .with_cancel_token(cancel_token.clone())
     .with_playback_control(playback_state.playback_control.clone());
 
-    spawn_playback(window, engine, session, cancel_token);
+    // Mark the session live before the task starts, so a cache clear that races
+    // the first clip is refused rather than deleting a file mid-read.
+    playback_state.session_active.store(true, Ordering::Relaxed);
+    spawn_playback(
+        window,
+        engine,
+        session,
+        cancel_token,
+        playback_state.session_active.clone(),
+    );
     Ok(())
 }
 
@@ -222,6 +250,7 @@ fn spawn_playback(
     engine: PlaybackEngine,
     session: PreparedSession,
     cancel_token: CancellationToken,
+    session_active: Arc<AtomicBool>,
 ) {
     tokio::spawn(async move {
         let window_for_events = window.clone();
@@ -241,6 +270,9 @@ fn spawn_playback(
             )
             .await;
 
+        // The session is over either way, so the cache is safe to maintain again.
+        session_active.store(false, Ordering::Relaxed);
+
         if let Err(error) = &result {
             let _ = window.emit("playback-error", error.to_string());
         }
@@ -257,6 +289,9 @@ pub async fn stop_playback(playback_state: State<'_, PlaybackState>) -> Result<(
     // it waits, and the next session must not inherit the paused state.
     playback_state.playback_control.resume();
     token.cancel();
+    playback_state
+        .session_active
+        .store(false, Ordering::Relaxed);
     playback_state
         .tafsir_voice_active
         .store(false, Ordering::Relaxed);
@@ -311,6 +346,58 @@ pub async fn get_cache_status(
 #[serde(rename_all = "camelCase")]
 pub struct CacheStatusPayload {
     pub cached_count: usize,
+}
+
+/// The storage panel's numbers: what the media cache holds, and against what cap.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CacheUsagePayload {
+    pub total_bytes: u64,
+    pub file_count: usize,
+    pub qari_bytes: u64,
+    pub translation_bytes: u64,
+    pub tafsir_bytes: u64,
+    /// `None` when the cap is switched off.
+    pub limit_bytes: Option<u64>,
+}
+
+#[tauri::command]
+pub async fn get_cache_usage() -> Result<CacheUsagePayload, String> {
+    let cache = AudioCache::new().map_err(|e| e.to_string())?;
+    let usage = cache.usage().await;
+    Ok(CacheUsagePayload {
+        total_bytes: usage.total_bytes,
+        file_count: usage.file_count,
+        qari_bytes: usage.qari_bytes,
+        translation_bytes: usage.translation_bytes,
+        tafsir_bytes: usage.tafsir_bytes,
+        limit_bytes: media_limit_bytes(),
+    })
+}
+
+/// Deletes cached audio. Refuses while a clip is playing so playback never
+/// reads a file that is being removed underneath it.
+///
+/// Audio is re-downloadable and narration is re-synthesised, so this only needs
+/// the playback guard, not a confirmation of its own beyond the UI's.
+#[tauri::command]
+pub async fn clear_cache(
+    playback_state: State<'_, PlaybackState>,
+) -> Result<CacheUsagePayload, String> {
+    if playback_state.is_active() {
+        return Err("Stop playback before clearing the cache.".to_owned());
+    }
+    let cache = AudioCache::new().map_err(|e| e.to_string())?;
+    cache.clear_media().await;
+    let usage = cache.usage().await;
+    Ok(CacheUsagePayload {
+        total_bytes: usage.total_bytes,
+        file_count: usage.file_count,
+        qari_bytes: usage.qari_bytes,
+        translation_bytes: usage.translation_bytes,
+        tafsir_bytes: usage.tafsir_bytes,
+        limit_bytes: media_limit_bytes(),
+    })
 }
 
 #[tauri::command]

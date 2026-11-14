@@ -43,6 +43,8 @@ export {
 } from './playback/settings.svelte';
 export {
   refreshCacheStatus,
+  refreshCacheUsage,
+  clearCache,
   refreshTtsVoiceStatus,
   setTtsEnabled
 } from './playback/status.svelte';

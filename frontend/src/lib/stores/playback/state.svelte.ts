@@ -66,6 +66,13 @@ export const playbackState = $state({
   shuffle: false,
   cacheReady: 0,
   cacheTotal: 0,
+  /** Bytes the media cache holds, and its cap (`null` when uncapped). */
+  cacheUsageBytes: 0,
+  cacheLimitBytes: null as number | null,
+  cacheFileCount: 0,
+  cacheQariBytes: 0,
+  cacheTranslationBytes: 0,
+  cacheTafsirBytes: 0,
   current: 0,
   total: 0,
   ttsVoiceStatus: 'checking' as TtsVoiceStatus,

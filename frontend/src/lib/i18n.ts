@@ -61,6 +61,18 @@ const id: Dictionary = {
   'settings.cacheNone': 'Belum ada audio qari tersimpan untuk surah ini',
   'settings.cacheReady': 'ayat punya audio qari',
   'settings.offline': 'Tersimpan untuk pemutaran offline',
+  'settings.storageOf': '%s dari %s',
+  'settings.storageUsedOnly': '%s terpakai',
+  'settings.storageFiles': '%s berkas',
+  'settings.storageQari': 'Qari',
+  'settings.storageTranslation': 'Terjemahan',
+  'settings.storageTafsir': 'Tafsir',
+  'settings.storageHint': 'Berkas terlama dihapus otomatis saat melewati %s',
+  'settings.storageHintUncapped': 'Tanpa batas ukuran; berkas hanya dihapus saat Anda mengosongkan',
+  'settings.clearCache': 'Kosongkan cache',
+  'settings.clearing': 'Mengosongkan…',
+  'settings.cacheCleared': 'Cache dikosongkan',
+  'settings.cacheClearBlocked': 'Hentikan pemutaran sebelum mengosongkan cache',
 
   'play.stop': 'Berhenti',
   'play.phase.qari': 'Qari',
@@ -181,6 +193,18 @@ const en: Dictionary = {
   'settings.cacheNone': 'No qari audio stored for this surah yet',
   'settings.cacheReady': 'verses have qari audio',
   'settings.offline': 'Stored for offline playback',
+  'settings.storageOf': '%s of %s',
+  'settings.storageUsedOnly': '%s used',
+  'settings.storageFiles': '%s files',
+  'settings.storageQari': 'Qari',
+  'settings.storageTranslation': 'Translation',
+  'settings.storageTafsir': 'Tafsir',
+  'settings.storageHint': 'Oldest files are removed automatically past %s',
+  'settings.storageHintUncapped': 'No size cap; files are removed only when you clear',
+  'settings.clearCache': 'Clear cache',
+  'settings.clearing': 'Clearing…',
+  'settings.cacheCleared': 'Cache cleared',
+  'settings.cacheClearBlocked': 'Stop playback before clearing the cache',
 
   'play.stop': 'Stop',
   'play.phase.qari': 'Reciter',
@@ -297,6 +321,25 @@ export function revelationLabel(place: string): string {
 /** One number format across the interface, matching the active language. */
 export function formatNumber(value: number): string {
   return value.toLocaleString(locale() === 'en' ? 'en-US' : 'id-ID');
+}
+
+/**
+ * A byte count as one short, readable figure.
+ *
+ * Storage is read at a glance, not calculated, so this stays to one decimal at
+ * most and uses the decimal units (KB, MB, GB) people compare against a disk.
+ */
+export function formatBytes(bytes: number): string {
+  if (bytes < 1000) return `${formatNumber(bytes)} B`;
+  const units = ['KB', 'MB', 'GB', 'TB'];
+  let value = bytes / 1000;
+  let unit = 0;
+  while (value >= 1000 && unit < units.length - 1) {
+    value /= 1000;
+    unit += 1;
+  }
+  const rounded = value >= 100 ? Math.round(value) : Math.round(value * 10) / 10;
+  return `${formatNumber(rounded)} ${units[unit]}`;
 }
 
 /**
