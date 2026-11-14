@@ -58,7 +58,7 @@ tidak siap, TTS dinonaktifkan dengan pesan yang bisa ditindaklanjuti.
 #### Setup Runtime
 
 ```bash
-cd /home/dani/equran-cli/tts
+cd tts
 bash setup.sh
 ```
 
@@ -469,4 +469,6 @@ Untuk contribute:
 
 ## License
 
-[Add license information here]
+MIT — lihat [`LICENSE`](LICENSE). Teks Qur'an, rekaman qari, dan tafsir dimiliki
+oleh sumbernya masing-masing (lihat bagian *Data sources and attribution* di
+`README.md`); lisensi ini mencakup kode, bukan konten tersebut.
