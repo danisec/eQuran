@@ -145,9 +145,11 @@ Endpoint tafsir UmmahAPI bisa dipakai tanpa kunci. Untuk kuota/atribusi
 pribadi, set `UMMAH_API_KEY` di environment aplikasi; nilainya tidak pernah
 disimpan di repository.
 
-Cache TTS tafsir memakai kode bahasa, mis. `tafsir_supertonic_en_*.wav`, jadi
-narasi Inggris dan Indonesia tidak saling menimpa. Cache TTS English ayat tetap
-memakai nama `supertonic_en_*.wav` seperti sebelumnya.
+Cache TTS narasi memakai nama per chunk: `translation_supertonic_en_*` untuk
+terjemahan yang dibacakan dan `tafsir_supertonic_en_*` untuk fase tafsir. Teks
+Inggris bisa jauh melebihi 320 karakter, jadi tidak pernah dikirim sebagai satu
+permintaan sintesis (permintaan sebesar itu melampaui timeout worker dan
+memblokir permintaan berikutnya di balik mutex service tunggal).
 
 ## Cache System
 
@@ -158,6 +160,7 @@ memakai nama `supertonic_en_*.wav` seperti sebelumnya.
 ├── audio/          # MP3 qari dari EQuran.id
 └── tts/            # TTS output
     ├── supertonic_id_001_001.wav
+    ├── translation_supertonic_en_001_001_001.wav
     ├── tafsir_supertonic_id_001_001_001.wav
     └── tafsir_supertonic_en_001_001_001.wav
 ```
@@ -293,11 +296,14 @@ qari → terjemahan → tafsir, lalu lanjut ke ayat berikutnya. Implementasinya 
 1. Tafsir surah di-fetch sekali saat `start_playback` (`fetch_tafsir`) dan
    ditempel ke `Ayat::tafsir`. Kegagalan fetch tidak fatal — narasi tafsir
    dilewati, playback tetap jalan.
-2. Saat ayat diputar, semua chunk tafsir disintesis **paralel** dengan
-   recitation (`tafsir_handle`), jadi chunk pertama biasanya sudah siap saat
-   terjemahan selesai.
+2. Teks narasi dipotong per 320 karakter (`TtsEngine::split_narration_text`).
+   Chunk disintesis lewat channel sambil diputar (`tokio::sync::mpsc`), jadi
+   kalimat pertama berbunyi begitu chunk pertama siap, bukan setelah seluruh
+   tafsir selesai dirender. Untuk `lang = en`, terjemahan yang dibacakan adalah
+   tafsir itu sendiri, sehingga fase tafsir tidak diulang.
 3. Setelah terjemahan, engine meng-emit `PlaybackPhase::Tafsir` lalu memutar
-   chunk berurutan dari cache.
+   chunk berurutan. Satu chunk yang gagal hanya melewatkan kalimat itu; sisa
+   narasi dan sesi tetap berjalan.
 
 Cache memakai nama yang sama dengan tombol Voice (`tafsir_supertonic_id_*`),
 jadi audio yang sudah pernah didengar lewat tombol Voice tidak disintesis ulang.

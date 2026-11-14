@@ -1,7 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 
-import { tafsirState, tafsirVoiceState, tafsirTextForAyah } from '../tafsir.svelte';
+import { tafsirState, tafsirVoiceState } from '../tafsir.svelte';
 import { readableError } from './errors';
 import { playbackState, type PlaybackProgress } from './state.svelte';
 
@@ -37,13 +37,9 @@ export async function startPlayback(
   session = { surah: surahNumber, from, to: toAyah, total: totalAyat };
 
   try {
-    // English playback reads the tafsir, so make sure it is loaded and attached
-    // to the selected surah before the engine starts. A failure is not fatal:
-    // the backend falls back to the verse translation.
-    if (playbackState.lang === 'en') {
-      await tafsirTextForAyah(surahNumber, from).catch(() => '');
-    }
-
+    // The backend loads the English tafsir itself before the session starts, so
+    // playback must not wait on a second network round trip here: a slow tafsir
+    // request used to leave the bar spinning with nothing playing.
     await invoke('start_playback', {
       request: {
         surahNumber,

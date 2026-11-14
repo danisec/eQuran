@@ -100,8 +100,57 @@ pub fn tts_filename(lang: &str, surah: u8, ayah: u16) -> String {
     format!("{TTS_PREFIX}_{lang}_{surah:03}_{ayah:03}.wav")
 }
 
-pub fn tafsir_tts_chunk_filename(lang: &str, surah: u8, ayah: u16, chunk: usize) -> String {
-    format!("tafsir_{TTS_PREFIX}_{lang}_{surah:03}_{ayah:03}_{chunk:03}.wav")
+/// Cache name for one spoken tafsir chunk.
+///
+/// The text hash is part of the name because cleaning can remove an
+/// all-script paragraph and shift every following chunk index. Without it, an
+/// older file for index N could be replayed for different words.
+pub fn tafsir_tts_chunk_filename(
+    lang: &str,
+    surah: u8,
+    ayah: u16,
+    chunk: usize,
+    text: &str,
+) -> String {
+    chunk_filename("tafsir", lang, surah, ayah, chunk, text)
+}
+
+/// Cache name for one spoken chunk of the ayah translation.
+///
+/// English uses the tafsir as the translation, and a tafsir can be thousands of
+/// characters long. It is spoken chunk by chunk, so it needs the same
+/// text-addressed naming as the tafsir narration instead of the single
+/// `supertonic_<lang>_<surah>_<ayah>.wav` file.
+pub fn translation_tts_chunk_filename(
+    lang: &str,
+    surah: u8,
+    ayah: u16,
+    chunk: usize,
+    text: &str,
+) -> String {
+    chunk_filename("translation", lang, surah, ayah, chunk, text)
+}
+
+fn chunk_filename(
+    kind: &str,
+    lang: &str,
+    surah: u8,
+    ayah: u16,
+    chunk: usize,
+    text: &str,
+) -> String {
+    format!(
+        "{kind}_{TTS_PREFIX}_{lang}_{surah:03}_{ayah:03}_{chunk:03}_{:08x}.wav",
+        text_hash(text)
+    )
+}
+
+fn text_hash(text: &str) -> u32 {
+    use std::hash::{Hash, Hasher};
+
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    text.hash(&mut hasher);
+    hasher.finish() as u32
 }
 
 #[cfg(test)]
@@ -113,9 +162,21 @@ mod tests {
         assert_eq!(audio_filename("05", 1, 7), "05_001_007.mp3");
         assert_eq!(tts_filename("id", 1, 7), "supertonic_id_001_007.wav");
         assert_eq!(tts_filename("en", 36, 12), "supertonic_en_036_012.wav");
-        assert_eq!(
-            tafsir_tts_chunk_filename("id", 1, 7, 2),
-            "tafsir_supertonic_id_001_007_002.wav"
+        let name = tafsir_tts_chunk_filename("id", 1, 7, 2, "Bismillah");
+        assert!(name.starts_with("tafsir_supertonic_id_001_007_002_"));
+        assert!(name.ends_with(".wav"));
+        // The text, not just the position, identifies the audio.
+        assert_ne!(
+            name,
+            tafsir_tts_chunk_filename("id", 1, 7, 2, "Alhamdulillah")
+        );
+
+        let translation = translation_tts_chunk_filename("en", 1, 2, 1, "This Surah");
+        assert!(translation.starts_with("translation_supertonic_en_001_002_001_"));
+        // Translation and tafsir audio never share a file.
+        assert_ne!(
+            translation,
+            tafsir_tts_chunk_filename("en", 1, 2, 1, "This Surah")
         );
     }
 

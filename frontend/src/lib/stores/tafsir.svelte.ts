@@ -122,26 +122,6 @@ export function tafsirForAyah(
 }
 
 /**
- * Returns the tafsir text for an ayah, loading the surah's tafsir on demand.
- *
- * Used by the translation voice so English playback can read the tafsir of the
- * ayah instead of the Indonesian verse translation.
- */
-export async function tafsirTextForAyah(
-  surahNumber: number,
-  ayahNumber: number,
-  lang = playbackState.lang
-): Promise<string> {
-  const cached = tafsirForAyah(surahNumber, ayahNumber, lang);
-  if (cached) {
-    return cached.teks;
-  }
-
-  const surah = await loadTafsir(surahNumber, lang);
-  return surah?.tafsir.find((tafsir) => tafsir.ayat === ayahNumber)?.teks ?? '';
-}
-
-/**
  * Copies the loaded tafsir into `surahState.selected.ayat` so the playback
  * engine can read it without another round trip.
  *

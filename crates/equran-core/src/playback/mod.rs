@@ -3,6 +3,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use anyhow::{Context, Result, bail};
+use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 
@@ -284,9 +285,20 @@ impl PlaybackEngine {
         for (index, ayah) in ayat.iter().enumerate() {
             let translation = self.translation_for(ayah, english_surah, lang)?;
             println!("Generating TTS {}/{}...", index + 1, total);
-            self.tts
-                .synthesize_cached(translation, lang, surah.nomor, ayah.nomor_ayat)
-                .await?;
+            for (chunk_index, chunk) in TtsEngine::split_narration_text(translation)
+                .into_iter()
+                .enumerate()
+            {
+                self.tts
+                    .synthesize_translation_chunk_cached(
+                        &chunk,
+                        lang,
+                        surah.nomor,
+                        ayah.nomor_ayat,
+                        chunk_index + 1,
+                    )
+                    .await?;
+            }
         }
         println!("TTS cache ready.");
         Ok(())
@@ -325,7 +337,13 @@ impl PlaybackEngine {
         });
         // The tafsir is synthesised in parallel with the recitation so its
         // first chunk is usually ready by the time the translation ends.
-        let tafsir_task = self.spawn_tafsir_tts(&request);
+        // English already reads the tafsir as its translation, so reading it
+        // again in the tafsir phase would narrate the same commentary twice.
+        let tafsir_task = if request.lang == Lang::En && plan.current_ayah {
+            None
+        } else {
+            self.spawn_tafsir_tts(&request)
+        };
         let prefetch_task = self.spawn_prefetch_tts(&request, plan)?;
 
         if self.cancel_token.is_cancelled() {
@@ -339,7 +357,7 @@ impl PlaybackEngine {
         }
 
         if plan.current_ayah {
-            self.play_translation(&request, translation, translation_task, on_event)
+            self.play_translation(&request, translation_task, on_event)
                 .await?;
         }
 
@@ -377,104 +395,122 @@ impl PlaybackEngine {
         play_audio_controlled(&audio_path, &self.cancel_token, &self.control).await
     }
 
-    /// Plays the generated translation, waiting for the render that was started
-    /// before the recitation so the two do not run back to back.
+    /// Plays the generated translation chunk by chunk, waiting for the render
+    /// that was started before the recitation so the two do not run back to
+    /// back.
     async fn play_translation(
         &self,
         request: &AyahRequest<'_>,
-        translation: &str,
-        task: Option<JoinHandle<Result<PathBuf>>>,
+        mut chunks: Option<mpsc::Receiver<PathBuf>>,
         on_event: Option<&PlaybackEventHandler>,
     ) -> Result<()> {
         self.emit_event(on_event, request, PlaybackPhase::Translation);
 
-        let tts_path = match task {
-            Some(handle) => handle
-                .await
-                .context("TTS generation task was cancelled")??,
-            None => {
-                self.tts
-                    .synthesize_cached(
-                        translation,
-                        request.lang,
-                        request.surah_number,
-                        request.ayah.nomor_ayat,
-                    )
-                    .await?
-            }
+        let Some(receiver) = chunks.as_mut() else {
+            return Ok(());
         };
 
+        // The renderer streams chunks while they are still being prepared, so
+        // the first sentence starts as soon as it exists instead of waiting
+        // for the whole ayah (an English tafsir can take many minutes).
         self.emit_event(on_event, request, PlaybackPhase::Cache);
-        play_audio_controlled(&tts_path, &self.cancel_token, &self.control)
-            .await
-            .or_else(|error| {
-                bail!(
-                    "failed to play generated TTS file {}: {error}",
-                    tts_path.display()
-                )
-            })
-    }
-
-    /// Plays the tafsir chunks in order, aborting the render when the session
-    /// was stopped while it was still being generated.
-    async fn play_tafsir(
-        &self,
-        request: &AyahRequest<'_>,
-        task: Option<JoinHandle<Result<Vec<PathBuf>>>>,
-        on_event: Option<&PlaybackEventHandler>,
-    ) -> Result<()> {
-        let Some(handle) = task else {
-            return Ok(());
-        };
-
-        if self.cancel_token.is_cancelled() {
-            handle.abort();
-            return Ok(());
-        }
-
-        self.emit_event(on_event, request, PlaybackPhase::Tafsir);
-
-        let chunk_paths = handle
-            .await
-            .context("tafsir TTS generation task was cancelled")??;
-
-        for chunk_path in chunk_paths {
+        while let Some(chunk_path) = receiver.recv().await {
             if self.cancel_token.is_cancelled() {
                 return Ok(());
             }
-            play_audio_controlled(&chunk_path, &self.cancel_token, &self.control)
-                .await
-                .with_context(|| {
-                    format!(
-                        "failed to play generated tafsir audio {}",
-                        chunk_path.display()
-                    )
-                })?;
+            if let Err(error) =
+                play_audio_controlled(&chunk_path, &self.cancel_token, &self.control).await
+            {
+                eprintln!(
+                    "translation chunk {} skipped: {error:#}",
+                    chunk_path.display()
+                );
+            }
         }
 
         Ok(())
     }
 
-    /// Renders the current ayah translation in the background.
+    /// Plays the tafsir chunks in order as they are rendered, stopping when the
+    /// session is cancelled.
+    async fn play_tafsir(
+        &self,
+        request: &AyahRequest<'_>,
+        mut chunks: Option<mpsc::Receiver<PathBuf>>,
+        on_event: Option<&PlaybackEventHandler>,
+    ) -> Result<()> {
+        let Some(receiver) = chunks.as_mut() else {
+            return Ok(());
+        };
+
+        if self.cancel_token.is_cancelled() {
+            return Ok(());
+        }
+
+        self.emit_event(on_event, request, PlaybackPhase::Tafsir);
+
+        while let Some(chunk_path) = receiver.recv().await {
+            if self.cancel_token.is_cancelled() {
+                return Ok(());
+            }
+            if let Err(error) =
+                play_audio_controlled(&chunk_path, &self.cancel_token, &self.control).await
+            {
+                eprintln!("tafsir chunk {} skipped: {error:#}", chunk_path.display());
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Streams the current ayah translation chunk by chunk.
+    ///
+    /// English translates to the tafsir, which can be thousands of characters.
+    /// One request for that much text exceeds the worker timeout and blocks
+    /// every other synthesis behind the single service mutex, which is exactly
+    /// the "voice is stuck" state. Chunks keep each request short, and the
+    /// channel lets playback start after the first one is ready.
     fn spawn_translation_tts(
         &self,
         surah_number: u8,
         ayah_number: u16,
         text: String,
         lang: Lang,
-    ) -> JoinHandle<Result<PathBuf>> {
+    ) -> mpsc::Receiver<PathBuf> {
+        let (sender, receiver) = mpsc::channel(2);
         let tts = self.tts.clone();
         tokio::spawn(async move {
-            tts.synthesize_cached(&text, lang, surah_number, ayah_number)
-                .await
-        })
+            let chunks = TtsEngine::split_narration_text(&text);
+            for (index, chunk) in chunks.iter().enumerate() {
+                match tts
+                    .synthesize_translation_chunk_cached(
+                        chunk,
+                        lang,
+                        surah_number,
+                        ayah_number,
+                        index + 1,
+                    )
+                    .await
+                {
+                    Ok(path) => {
+                        if sender.send(path).await.is_err() {
+                            // Playback stopped or moved on; stop rendering.
+                            return;
+                        }
+                    }
+                    Err(error) => eprintln!(
+                        "translation chunk {}/{} for {surah_number}:{ayah_number} skipped: {error:#}",
+                        index + 1,
+                        chunks.len()
+                    ),
+                }
+            }
+        });
+        receiver
     }
 
-    /// Renders every tafsir chunk in the background, when tafsir reading is on.
-    fn spawn_tafsir_tts(
-        &self,
-        request: &AyahRequest<'_>,
-    ) -> Option<JoinHandle<Result<Vec<PathBuf>>>> {
+    /// Streams every tafsir chunk in the background, when tafsir reading is on.
+    fn spawn_tafsir_tts(&self, request: &AyahRequest<'_>) -> Option<mpsc::Receiver<PathBuf>> {
         let text = self
             .read_tafsir
             .then_some(request.ayah.tafsir.as_deref())
@@ -482,31 +518,51 @@ impl PlaybackEngine {
             .map(str::trim)
             .filter(|text| !text.is_empty())?;
 
-        let chunks = TtsEngine::split_tafsir_text(text);
+        let chunks = TtsEngine::split_narration_text(text);
         let tts = self.tts.clone();
         let lang = request.lang;
         let surah_number = request.surah_number;
         let ayah_number = request.ayah.nomor_ayat;
+        let (sender, receiver) = mpsc::channel(2);
 
-        Some(tokio::spawn(async move {
-            let mut paths = Vec::with_capacity(chunks.len());
+        tokio::spawn(async move {
             for (index, chunk) in chunks.iter().enumerate() {
-                paths.push(
-                    tts.synthesize_tafsir_chunk_cached(
+                match tts
+                    .synthesize_tafsir_chunk_cached(
                         chunk,
                         lang,
                         surah_number,
                         ayah_number,
                         index + 1,
                     )
-                    .await?,
-                );
+                    .await
+                {
+                    Ok(path) => {
+                        if sender.send(path).await.is_err() {
+                            return;
+                        }
+                    }
+                    // Keep the readable chunks and skip the one that failed,
+                    // so one bad sentence cannot silence the rest of the tafsir.
+                    Err(error) => eprintln!(
+                        "tafsir chunk {}/{} for {surah_number}:{ayah_number} skipped: {error:#}",
+                        index + 1,
+                        chunks.len()
+                    ),
+                }
             }
-            Ok(paths)
-        }))
+        });
+
+        Some(receiver)
     }
 
-    /// Warms the next ayah's translation while the current one plays.
+    /// Warms the next ayah's first translation chunk while the current one
+    /// plays.
+    ///
+    /// Only the first chunk is rendered ahead: an English translation is a
+    /// multi-minute tafsir, and producing all of it before advancing would
+    /// stall the session at the end of every ayah. The remaining chunks stream
+    /// when the next ayah starts and reuse this warm cache entry.
     fn spawn_prefetch_tts(
         &self,
         request: &AyahRequest<'_>,
@@ -522,13 +578,27 @@ impl PlaybackEngine {
         let translation = self
             .translation_for(next, request.english_surah, request.lang)?
             .to_owned();
+        let Some(first_chunk) = TtsEngine::split_narration_text(&translation)
+            .into_iter()
+            .next()
+        else {
+            return Ok(None);
+        };
 
-        Ok(Some(self.spawn_translation_tts(
-            request.surah_number,
-            next.nomor_ayat,
-            translation,
-            request.lang,
-        )))
+        let tts = self.tts.clone();
+        let lang = request.lang;
+        let surah_number = request.surah_number;
+        let ayah_number = next.nomor_ayat;
+        Ok(Some(tokio::spawn(async move {
+            tts.synthesize_translation_chunk_cached(
+                &first_chunk,
+                lang,
+                surah_number,
+                ayah_number,
+                1,
+            )
+            .await
+        })))
     }
 
     /// Waits for the prefetch so a failed render is not reported as a playback

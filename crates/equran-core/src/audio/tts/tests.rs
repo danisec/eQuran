@@ -1,7 +1,7 @@
 //! Runtime, splitting and worker-protocol tests.
 
 use super::config::{SupertonicConfig, status_from_config};
-use super::text::split_text_for_tts;
+use super::text::{sanitize_for_speech, split_text_for_tts};
 use super::*;
 
 #[test]
@@ -135,7 +135,7 @@ fn make_executable(path: &Path) {
 #[test]
 fn splits_tafsir_text_by_paragraphs_and_sentences() {
     let text = "Paragraf pertama cukup pendek. Paragraf pertama kalimat kedua.\n\nParagraf kedua yang juga pendek.";
-    let chunks = TtsEngine::split_tafsir_text(text);
+    let chunks = TtsEngine::split_narration_text(text);
 
     assert_eq!(chunks.len(), 2);
     assert!(chunks[0].contains("kalimat kedua"));
@@ -156,6 +156,83 @@ fn keeps_whole_text_when_no_boundary_exists() {
     let chunks = split_text_for_tts("tanpa titik sama sekali", 700);
 
     assert_eq!(chunks, vec!["tanpa titik sama sekali".to_owned()]);
+}
+
+#[test]
+fn splits_one_oversized_sentence_at_word_boundaries() {
+    let text = "word ".repeat(200);
+    let text = text.trim();
+    let chunks = split_text_for_tts(text, 100);
+
+    assert!(chunks.len() > 1);
+    assert!(chunks.iter().all(|chunk| chunk.chars().count() <= 100));
+    assert_eq!(chunks.join(" "), text);
+}
+
+#[test]
+fn sanitize_drops_honorifics_and_arabic_script() {
+    let cleaned = sanitize_for_speech("The Companions ؓ said: قُلْ هُوَ اللّٰهُ and the Prophet ﷺ agreed.");
+
+    assert_eq!(cleaned, "The Companions said: and the Prophet agreed.");
+}
+
+#[test]
+fn sanitize_drops_urdu_letters_and_zero_width_joiners() {
+    let cleaned = sanitize_for_speech("Hasan and Mujahid رحمۃ اللہ علیہما say\u{200c} that");
+
+    assert_eq!(cleaned, "Hasan and Mujahid say that");
+}
+
+#[test]
+fn sanitize_removes_ornate_ayah_brackets_with_their_digits() {
+    let cleaned = sanitize_for_speech("Recite ﴿98﴾ now");
+
+    assert_eq!(cleaned, "Recite now");
+}
+
+#[test]
+fn sanitize_removes_brackets_emptied_by_dropped_script() {
+    let cleaned = sanitize_for_speech("Jibra'il (عليه السلام) came to him");
+
+    assert_eq!(cleaned, "Jibra'il came to him");
+}
+
+#[test]
+fn sanitize_normalizes_typographic_punctuation() {
+    let cleaned = sanitize_for_speech("The word „salm‟ is written salm′ here");
+
+    assert_eq!(cleaned, "The word \"salm\" is written salm' here");
+}
+
+#[test]
+fn sanitize_is_idempotent() {
+    let once = sanitize_for_speech("Abu Bakr ؓ said ﻻ إله unless the Wise");
+    let twice = sanitize_for_speech(&once);
+
+    assert_eq!(once, twice);
+}
+
+#[test]
+fn tafsir_chunks_never_contain_arabic_script() {
+    let text = "He was guided by the verse قُلْ هُوَ اللّٰهُ أَحَدٌ and by the Companions ؓ. Then he \
+                explained the phrase in detail, and the audience understood it, and the lesson \
+                stayed with them for the rest of their lives.";
+
+    let chunks = TtsEngine::split_narration_text(text);
+
+    assert!(!chunks.is_empty());
+    for chunk in chunks {
+        assert!(!chunk.is_empty());
+        assert!(
+            !chunk.chars().any(|character| {
+                matches!(
+                    character as u32,
+                    0x0600..=0x06FF | 0x0750..=0x077F | 0xFB50..=0xFDFF | 0xFE70..=0xFEFF
+                )
+            }),
+            "chunk still holds script the voice cannot read: {chunk}"
+        );
+    }
 }
 
 /// Writes a stand-in interpreter for tests.

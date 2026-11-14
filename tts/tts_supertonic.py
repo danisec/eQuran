@@ -10,6 +10,7 @@ Two modes:
 import argparse
 import json
 import os
+import re
 import select
 import sys
 import wave
@@ -87,6 +88,27 @@ class SupertonicSynthesizer:
     def describe(self) -> dict[str, Any]:
         return {"providers": self.providers, "threads": self.threads}
 
+    def speakable_text(self, text: str) -> str:
+        """Remove characters the loaded model cannot encode.
+
+        The Rust side already drops Arabic and Urdu script from the narration,
+        but the model's character table is the final authority. Filtering with
+        it here means one unexpected symbol becomes a short pause instead of
+        failing the request and stopping the tafsir mid-surah.
+        """
+        processor = self.tts.model.text_processor
+        kept = []
+        for character in text:
+            if character.isspace() or processor.validate_text(character)[0]:
+                kept.append(character)
+            else:
+                kept.append(" ")
+
+        cleaned = re.sub(r"\s+", " ", "".join(kept)).strip()
+        if not cleaned:
+            raise ValueError("text has nothing the narrator can read")
+        return cleaned
+
     def synthesize(
         self,
         text: str,
@@ -94,6 +116,7 @@ class SupertonicSynthesizer:
         lang: str = "id",
         steps: int = DEFAULT_STEPS,
     ) -> None:
+        text = self.speakable_text(text)
         wav, _duration = self.tts.synthesize(
             text=text,
             voice_style=self.style,

@@ -22,15 +22,21 @@ impl AppState {
         writable_tts_root: Option<PathBuf>,
     ) -> anyhow::Result<Self> {
         let project_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
-        let mut tts_roots = Vec::new();
         let writable_tts_root = writable_tts_root.unwrap_or_else(|| project_root.clone());
-        tts_roots.push(writable_tts_root.clone());
+
+        // The worker script is part of the binary's contract, so the bundled
+        // resource (or the checkout during development) must win. The app-data
+        // directory is searched last: it is writable and useful for the Python
+        // venv, but a copy left there by an older install must not shadow the
+        // script shipped with this build.
+        let mut tts_roots = Vec::new();
         if let Some(resource_root) = resource_root {
             tts_roots.push(resource_root);
         }
         if include_project_tts_root() {
             tts_roots.push(project_root);
         }
+        tts_roots.push(writable_tts_root.clone());
 
         Ok(Self {
             api: ApiClient::new()?,
@@ -114,14 +120,14 @@ mod tests {
     }
 
     #[test]
-    fn app_state_prioritizes_resource_root_for_tts() {
+    fn app_state_prioritizes_bundled_tts_over_app_data() {
         let resource_root = std::path::PathBuf::from("/tmp/equran-resource");
         let writable_root = std::path::PathBuf::from("/tmp/equran-writable");
         let state = AppState::new(Some(resource_root.clone()), Some(writable_root.clone()))
             .expect("AppState should initialize");
 
-        assert_eq!(state.tts_roots().first(), Some(&writable_root));
-        assert_eq!(state.tts_roots().get(1), Some(&resource_root));
+        assert_eq!(state.tts_roots().first(), Some(&resource_root));
+        assert_eq!(state.tts_roots().last(), Some(&writable_root));
     }
 
     #[test]

@@ -93,7 +93,7 @@ pub async fn play_tafsir_voice(
 
     let cache = AudioCache::new().map_err(|e| e.to_string())?;
     let tts = TtsEngine::with_project_roots(cache.root().clone(), state.tts_roots().to_vec());
-    let chunks = TtsEngine::split_tafsir_text(&text);
+    let chunks = TtsEngine::split_narration_text(&text);
     if chunks.is_empty() {
         return Err("Tafsir text is empty".to_owned());
     }
@@ -142,30 +142,12 @@ async fn play_tafsir_chunks(
     paused_flag: Arc<AtomicBool>,
     control: Arc<PlaybackControl>,
 ) -> Result<(), String> {
-    let current_audio = tts
-        .synthesize_tafsir_chunk_cached(&chunks[0], lang, surah_number, ayah_number, 1)
-        .await
-        .map_err(|e| format!("Failed to generate tafsir voice: {e}"))?;
-
     const TAFSIR_PREFETCH_AHEAD: usize = 3;
-    let mut next_chunk_index = 1;
+    let mut next_chunk_index = 0;
     let mut queued_audio: VecDeque<JoinHandle<anyhow::Result<PathBuf>>> = VecDeque::new();
+    let mut played = 0usize;
 
-    while next_chunk_index < chunks.len() && queued_audio.len() < TAFSIR_PREFETCH_AHEAD {
-        queued_audio.push_back(spawn_tafsir_chunk_synthesis(
-            tts.clone(),
-            chunks[next_chunk_index].clone(),
-            lang,
-            surah_number,
-            ayah_number,
-            next_chunk_index + 1,
-        ));
-        next_chunk_index += 1;
-    }
-
-    let mut current_audio = Some(current_audio);
-
-    while let Some(audio_path) = current_audio.take() {
+    loop {
         while next_chunk_index < chunks.len() && queued_audio.len() < TAFSIR_PREFETCH_AHEAD {
             queued_audio.push_back(spawn_tafsir_chunk_synthesis(
                 tts.clone(),
@@ -178,26 +160,44 @@ async fn play_tafsir_chunks(
             next_chunk_index += 1;
         }
 
-        play_audio_controlled(&audio_path, &cancel_token, &control)
-            .await
-            .map_err(|e| format!("Failed to play tafsir audio: {e}"))?;
+        let Some(queued) = queued_audio.pop_front() else {
+            break;
+        };
+
+        let audio_path = match queued.await {
+            Ok(Ok(path)) => path,
+            // One unreadable chunk should cost that sentence, not the rest of
+            // the tafsir. This is why the narration used to stop mid-surah.
+            Ok(Err(error)) => {
+                eprintln!("tafsir chunk skipped: {error:#}");
+                continue;
+            }
+            Err(error) => {
+                eprintln!("tafsir chunk task failed: {error}");
+                continue;
+            }
+        };
 
         if cancel_token.is_cancelled() {
             break;
         }
 
-        if let Some(next_audio) = queued_audio.pop_front() {
-            current_audio = Some(
-                next_audio
-                    .await
-                    .map_err(|e| format!("failed to join tafsir TTS task: {e}"))?
-                    .map_err(|e| e.to_string())?,
-            );
+        match play_audio_controlled(&audio_path, &cancel_token, &control).await {
+            Ok(()) => played += 1,
+            Err(error) => eprintln!("tafsir audio skipped: {error:#}"),
+        }
+
+        if cancel_token.is_cancelled() {
+            break;
         }
     }
 
     active_flag.store(false, Ordering::Relaxed);
     paused_flag.store(false, Ordering::Relaxed);
+
+    if played == 0 && !cancel_token.is_cancelled() {
+        return Err("Tafsir voice could not be generated".to_owned());
+    }
     Ok(())
 }
 
