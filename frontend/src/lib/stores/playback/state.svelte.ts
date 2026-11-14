@@ -19,7 +19,12 @@ export type PlaybackProgress = {
 export type TtsVoiceStatusPayload = {
   status: string;
   ready: boolean;
-  message: string;
+  /** The specific cause when not ready (interpreter, missing files). */
+  detail: string;
+  /** True when a bundled setup script exists, so the app can run it. */
+  canSetup: boolean;
+  /** A command to run by hand when the in-app setup cannot proceed. */
+  setupCommand: string;
 };
 
 export const QARI_MAP: Record<string, string> = {
@@ -76,5 +81,13 @@ export const playbackState = $state({
   current: 0,
   total: 0,
   ttsVoiceStatus: 'checking' as TtsVoiceStatus,
-  ttsVoiceMessage: 'Checking Supertonic 3 voice status.'
+  /** The backend's diagnosis when the voice is not ready. */
+  ttsVoiceMessage: 'Checking Supertonic 3 voice status.',
+  /** True when the app can run the bundled setup itself. */
+  ttsCanSetup: false,
+  /** The manual command to show as a fallback. */
+  ttsSetupCommand: '',
+  /** Setup progress lines streamed from the backend. */
+  ttsSetupLog: [] as string[],
+  ttsSettingUp: false
 });

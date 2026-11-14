@@ -1003,6 +1003,7 @@ dependencies = [
  "tauri",
  "tauri-build",
  "tauri-plugin-store",
+ "tempfile",
  "tokio",
  "tokio-util",
 ]

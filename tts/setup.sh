@@ -4,6 +4,11 @@ set -euo pipefail
 
 cd "$(dirname "$0")"
 
+# The venv normally sits next to this script. An installed eQuran cannot write
+# there (the package directory is root-owned), so the desktop app sets VENV_DIR
+# to a writable path under its own data directory and runs this same script.
+VENV_DIR="${VENV_DIR:-.venv}"
+
 # onnxruntime publishes wheels only up to a certain CPython version, and the
 # newest system Python is often past it. Picking the newest supported
 # interpreter here is the difference between a working venv and a pip resolver
@@ -37,10 +42,11 @@ EOF
 fi
 
 echo "Using $("$PYTHON" --version 2>&1) at $(command -v "$PYTHON")"
+echo "Installing the runtime into $VENV_DIR"
 
-"$PYTHON" -m venv .venv
+"$PYTHON" -m venv "$VENV_DIR"
 # shellcheck disable=SC1091
-source .venv/bin/activate
+source "$VENV_DIR/bin/activate"
 
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
@@ -48,4 +54,4 @@ python -m pip install -r requirements.txt
 # Fail fast instead of discovering a broken runtime on the first playback.
 python -c "import supertonic, onnxruntime" >/dev/null
 
-echo "✓ Supertonic 3 runtime ready"
+echo "✓ Supertonic 3 runtime ready in $VENV_DIR"

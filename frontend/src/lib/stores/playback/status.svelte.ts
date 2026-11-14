@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
+import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 
 import { readableError } from './errors';
 import { playbackState, type TtsVoiceStatus, type TtsVoiceStatusPayload } from './state.svelte';
@@ -33,6 +34,47 @@ export async function refreshTtsVoiceStatus() {
     );
     playbackState.ttsEnabled = false;
   }
+}
+
+let setupProgressUnlisten: UnlistenFn | null = null;
+
+/**
+ * Runs the bundled setup script and streams its output into the panel.
+ *
+ * The backend writes the venv under the app's data directory, so this needs no
+ * password. On success the returned status is applied directly; on failure the
+ * reader keeps the log so the Python or network error is visible.
+ */
+export async function setupTtsRuntime(): Promise<string> {
+  if (playbackState.ttsSettingUp) {
+    return '';
+  }
+
+  playbackState.ttsSettingUp = true;
+  playbackState.ttsSetupLog = [];
+  let error = '';
+
+  try {
+    if (!setupProgressUnlisten) {
+      setupProgressUnlisten = await listen<{ line: string }>('tts-setup-progress', (event) => {
+        // Keep the tail: pip is chatty and the panel shows recent activity.
+        const next = [...playbackState.ttsSetupLog, event.payload.line];
+        playbackState.ttsSetupLog = next.slice(-40);
+      });
+    }
+
+    const result = await invoke<TtsVoiceStatusPayload>('setup_tts_runtime');
+    applyTtsVoiceStatus(result);
+    if (!result.ready) {
+      error = result.detail || 'Setup finished but the voice is still not ready.';
+    }
+  } catch (invokeError) {
+    error = readableError(invokeError, 'Unable to set up the speech runtime.');
+  } finally {
+    playbackState.ttsSettingUp = false;
+  }
+
+  return error;
 }
 
 /**
@@ -112,7 +154,9 @@ function applyCacheUsage(result: CacheUsagePayload) {
 
 function applyTtsVoiceStatus(result: TtsVoiceStatusPayload) {
   playbackState.ttsVoiceStatus = result.ready ? 'ready' : (result.status as TtsVoiceStatus);
-  playbackState.ttsVoiceMessage = result.message;
+  playbackState.ttsVoiceMessage = result.detail;
+  playbackState.ttsCanSetup = result.canSetup;
+  playbackState.ttsSetupCommand = result.setupCommand;
 
   if (!result.ready) {
     playbackState.ttsEnabled = false;

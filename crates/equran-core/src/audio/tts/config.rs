@@ -13,6 +13,8 @@ pub(super) struct SupertonicConfig {
     pub(super) python: PathBuf,
     pub(super) gpu_python: Option<PathBuf>,
     pub(super) script: PathBuf,
+    /// True when `python` is a project venv rather than a system interpreter.
+    pub(super) uses_project_venv: bool,
     pub(super) voice: String,
     pub(super) total_steps: u32,
     pub(super) device: String,
@@ -25,11 +27,12 @@ impl SupertonicConfig {
             .map(PathBuf::from)
             .unwrap_or_else(|| first_project_file(project_roots, "tts/tts_supertonic.py"));
 
+        let venv_python = first_project_file(project_roots, "tts/.venv/bin/python");
+        let uses_project_venv = venv_python.is_file();
         let python = std::env::var_os("EQURAN_TTS_PYTHON")
             .map(PathBuf::from)
             .unwrap_or_else(|| {
-                let venv_python = first_project_file(project_roots, "tts/.venv/bin/python");
-                if venv_python.is_file() {
+                if uses_project_venv {
                     venv_python
                 } else {
                     PathBuf::from("python3")
@@ -67,6 +70,7 @@ impl SupertonicConfig {
             python,
             gpu_python,
             script,
+            uses_project_venv,
             voice,
             total_steps,
             device,
@@ -105,7 +109,7 @@ pub(super) fn status_from_config(config: &SupertonicConfig) -> TtsVoiceStatus {
 }
 
 /// Resolves the first `relative_path` that exists under any project root.
-fn first_project_file(project_roots: &[PathBuf], relative_path: &str) -> PathBuf {
+pub(super) fn first_project_file(project_roots: &[PathBuf], relative_path: &str) -> PathBuf {
     project_roots
         .iter()
         .map(|root| root.join(relative_path))
@@ -148,8 +152,6 @@ pub(super) fn interpreter_version(python: &Path) -> Option<String> {
 /// session over a momentary hiccup, so those are retried and, if they persist,
 /// left uncached.
 pub(super) fn supertonic_module_available(python: &Path) -> bool {
-    static CACHE: OnceLock<StdMutex<HashMap<PathBuf, bool>>> = OnceLock::new();
-
     let key = if python.components().count() == 1 {
         which_in_path(python)
     } else {
@@ -157,7 +159,7 @@ pub(super) fn supertonic_module_available(python: &Path) -> bool {
     }
     .unwrap_or_else(|| python.to_path_buf());
 
-    let cache = CACHE.get_or_init(|| StdMutex::new(HashMap::new()));
+    let cache = probe_cache();
     if let Ok(guard) = cache.lock()
         && let Some(cached) = guard.get(&key)
     {
@@ -174,6 +176,22 @@ pub(super) fn supertonic_module_available(python: &Path) -> bool {
         // Never cache "could not even try"; the next call gets a fresh attempt.
         None => false,
     }
+}
+
+/// Forgets every memoized probe answer.
+///
+/// The setup script can install the package into an interpreter that was
+/// already found lacking; without this the app would keep reporting "not ready"
+/// for the rest of the session and the reader would run setup twice.
+pub fn forget_supertonic_probes() {
+    if let Ok(mut guard) = probe_cache().lock() {
+        guard.clear();
+    }
+}
+
+fn probe_cache() -> &'static StdMutex<HashMap<PathBuf, bool>> {
+    static CACHE: OnceLock<StdMutex<HashMap<PathBuf, bool>>> = OnceLock::new();
+    CACHE.get_or_init(|| StdMutex::new(HashMap::new()))
 }
 
 /// Runs the import probe, retrying a transient spawn failure a few times.

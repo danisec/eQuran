@@ -70,10 +70,11 @@ impl TtsEngine {
 
     /// Diagnoses why the voice is not ready, in words the reader can act on.
     ///
-    /// "Install the supertonic package" is wrong advice when the package is
-    /// present but the interpreter is too new: `onnxruntime` publishes no wheel
-    /// for some Python versions, so `pip install` fails no matter what. Naming
-    /// the interpreter and the real cause is what actually helps.
+    /// "Install the supertonic package" is wrong advice when the interpreter
+    /// itself is the problem: `onnxruntime` publishes no wheel past Python 3.14,
+    /// so `pip install` fails no matter what. Naming the interpreter, its
+    /// version, and whether the app fell back to the system Python is what
+    /// actually tells the reader which fix applies.
     pub fn voice_diagnosis(&self) -> String {
         let config = SupertonicConfig::from_env_or_project_roots(&self.project_roots);
         if !config.script.is_file() {
@@ -81,14 +82,18 @@ impl TtsEngine {
         }
 
         let python = config.synthesis_python();
+        let name = python.display();
         match interpreter_version(python) {
+            // A fallback interpreter means no runtime was ever set up; the app
+            // borrowed the system Python and found no `supertonic` there.
+            Some(version) if !config.uses_project_venv => format!(
+                "The speech runtime is not set up yet. eQuran fell back to the system interpreter {name} (Python {version}), which does not have supertonic. onnxruntime ships wheels for Python 3.12–3.14."
+            ),
             Some(version) => format!(
-                "Python {version} ({}) cannot load supertonic. onnxruntime publishes wheels only up to Python 3.14, so use Python 3.12 or 3.14.",
-                python.display()
+                "The speech runtime at {name} (Python {version}) could not load supertonic. onnxruntime ships wheels for Python 3.12–3.14, so this runtime may need rebuilding."
             ),
             None => format!(
-                "The Python interpreter {} could not be run. Install Python 3.12 or 3.14 and the supertonic package.",
-                python.display()
+                "The Python interpreter {name} could not be run. Python 3.12–3.14 is required to build the speech runtime."
             ),
         }
     }

@@ -5,6 +5,26 @@ versioning](https://semver.org) for its public interfaces once they settle;
 until 1.0 is tagged on `master`, treat the CLI flags and the settings file as the
 things most worth watching.
 
+## Unreleased
+
+### Added
+
+* **Set up voice** in Settings → Translation voice. The app now prepares the
+  Supertonic runtime itself, writing the venv into its own data directory so no
+  password is needed, and streams install progress into the panel. A copyable
+  command is offered as a fallback when the in-app setup cannot run.
+* The status notice now distinguishes a runtime that was never set up (the app
+  fell back to the system Python) from one that exists but is broken.
+
+### Fixed
+
+* The Settings notice claimed a Python version problem even when no runtime had
+  been set up, and told the reader to "use Python 3.12 or 3.14" without saying
+  how. It now names what was actually searched and points at the setup action.
+* The packaged setup instructions could not work: `setup.sh` writes its venv
+  next to itself, which is root-owned after an install. The script now honours
+  `VENV_DIR`, and the app uses it to redirect the venv to a writable path.
+
 ## 1.1.0
 
 The speech engine changed: translation and tafsir are now spoken on-device by

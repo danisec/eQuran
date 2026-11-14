@@ -46,7 +46,8 @@ export {
   refreshCacheUsage,
   clearCache,
   refreshTtsVoiceStatus,
-  setTtsEnabled
+  setTtsEnabled,
+  setupTtsRuntime
 } from './playback/status.svelte';
 
 /** Wires up the session listeners and the tafsir voice poll. */

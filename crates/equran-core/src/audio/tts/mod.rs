@@ -7,6 +7,7 @@
 
 mod config;
 mod engine;
+mod runtime;
 mod service;
 mod text;
 
@@ -14,7 +15,9 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
+pub use config::forget_supertonic_probes;
 pub use engine::TtsEngine;
+pub use runtime::RuntimeSetup;
 
 const DEFAULT_VOICE: &str = "M2";
 const CACHE_SUBDIR: &str = "tts";

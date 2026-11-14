@@ -109,11 +109,15 @@ sudo apt install ./eQuran_1.1.0_amd64.deb
 
 Launch **eQuran** from your application menu, or run `equran-desktop`.
 
-Reading, search, marks, qari recitation and the Supertonic 3 translation voice all
-work from the package. The speech runtime is prepared once:
+Reading, search, marks and qari recitation work immediately. To turn on the
+[translation voice](#translation-voice), open **Settings → Translation voice** and
+press **Set up voice**: the app downloads the speech engine (~400 MB) into its own
+data directory. No password and no separate package install are needed.
+
+The same thing from a terminal, if you prefer:
 
 ```bash
-bash /usr/lib/eQuran/tts/setup.sh
+VENV_DIR="$HOME/.local/share/id.equran.desktop/tts/.venv" bash /usr/lib/eQuran/tts/setup.sh
 ```
 
 > [!NOTE]
@@ -214,20 +218,28 @@ equran-cli play --surah 1 --qari dossari --lang id --no-prefetch
 Translation and tafsir are spoken on-device by **Supertonic 3**, an ONNX
 multilingual engine. Nothing is sent to a TTS service.
 
+In the packaged app, open **Settings → Translation voice** and press **Set up
+voice**. The app runs the bundled setup script for you, writing the runtime into
+its own data directory (`~/.local/share/id.equran.desktop/tts/.venv`) so no
+password is required. Progress is shown in the panel.
+
+From a checkout, the equivalent is:
+
 ```bash
-bash tts/setup.sh
+bash tts/setup.sh          # writes tts/.venv
 ```
 
-The setup script picks the newest supported Python interpreter, creates
-`tts/.venv` and installs `supertonic`. The model (~400 MB) is downloaded on first
-synthesis and cached under `~/.cache/supertonic3/`. For GPU acceleration run
+The setup script picks the newest supported Python interpreter (3.12–3.14),
+creates the venv and installs `supertonic`. The model (~400 MB) is downloaded on
+first synthesis and cached under `~/.cache/supertonic3/`. For GPU acceleration run
 `bash tts/setup-gpu.sh` instead; it detects CUDA, ROCm, DirectML or CoreML and
 falls back to CPU.
 
 There is **no fallback engine**. If the runtime is not ready, a Settings banner
-names the real cause and the app plays the qari alone rather than silently
-switching to another voice. A long tafsir is spoken in chunks, so the first
-sentence starts as soon as it is rendered instead of waiting for the whole verse.
+names the real cause, offers the setup action, and lets you copy the equivalent
+command; the app plays the qari alone rather than silently switching to another
+voice. A long tafsir is spoken in chunks, so the first sentence starts as soon as
+it is rendered instead of waiting for the whole verse.
 
 ## Cache and storage
 
@@ -285,7 +297,7 @@ about those services, used for interoperability.
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| Translation voice never speaks; Settings shows a notice | Speech runtime missing | `bash tts/setup.sh` (packages: `/usr/lib/eQuran/tts/setup.sh`), then restart |
+| Translation voice never speaks; Settings shows a notice | Speech runtime missing | Press **Set up voice** in Settings, or run the command shown there |
 | Notice names a Python or interpreter error | `python3` is newer than the ONNX wheels support | Let `setup.sh` pick 3.12–3.14, or set `EQURAN_TTS_PYTHON` |
 | Narration is slow | No GPU build of ONNX Runtime | `bash tts/setup-gpu.sh`, or lower `EQURAN_TTS_SUPERTONIC_STEPS` |
 | Qari audio does not play on a source build | Built without the audio feature | `cargo build --release --features audio` |

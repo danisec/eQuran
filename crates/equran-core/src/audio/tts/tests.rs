@@ -83,6 +83,7 @@ fn reports_missing_runtime_when_python_cannot_import_supertonic() {
         python: failing_python,
         gpu_python: None,
         script,
+        uses_project_venv: false,
         voice: DEFAULT_VOICE.to_owned(),
         total_steps: DEFAULT_TOTAL_STEPS,
         device: DEFAULT_DEVICE.to_owned(),
@@ -107,6 +108,7 @@ fn reports_ready_when_python_imports_supertonic() {
         python: working_python,
         gpu_python: None,
         script,
+        uses_project_venv: false,
         voice: DEFAULT_VOICE.to_owned(),
         total_steps: DEFAULT_TOTAL_STEPS,
         device: DEFAULT_DEVICE.to_owned(),
@@ -389,4 +391,35 @@ for line in sys.stdin:
         std::fs::read_to_string(&second_output).expect("second output"),
         "second"
     );
+}
+
+#[test]
+fn forgets_the_cached_probe_answer_after_setup_installs_the_package() {
+    use std::os::unix::fs::PermissionsExt;
+
+    // A stand-in interpreter whose import result comes from a file, so the test
+    // can make the package "appear" between two probes without touching Python.
+    let temp_dir = tempfile::tempdir().expect("temp dir should be created");
+    let python = temp_dir.path().join("python");
+    std::fs::write(
+        &python,
+        "#!/bin/sh\nexit \"$(cat \"$(dirname \"$0\")/result\")\"\n",
+    )
+    .expect("interpreter stub should be written");
+    let mut permissions = std::fs::metadata(&python)
+        .expect("stub metadata")
+        .permissions();
+    permissions.set_mode(0o755);
+    std::fs::set_permissions(&python, permissions).expect("stub should be executable");
+    let result = temp_dir.path().join("result");
+    std::fs::write(&result, "1").expect("result should be written");
+
+    assert!(!config::supertonic_module_available(&python));
+    std::fs::write(&result, "0").expect("result should be rewritten");
+    // Memoized for the session: this is the state the panel used to get stuck in.
+    assert!(!config::supertonic_module_available(&python));
+
+    forget_supertonic_probes();
+
+    assert!(config::supertonic_module_available(&python));
 }

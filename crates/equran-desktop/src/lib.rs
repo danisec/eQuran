@@ -25,17 +25,19 @@ impl AppState {
         let project_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
         let writable_tts_root = writable_tts_root.unwrap_or_else(|| project_root.clone());
 
-        // The worker script is part of the binary's contract, so the bundled
-        // resource (or the checkout during development) must win. The app-data
-        // directory is searched last: it is writable and useful for the Python
-        // venv, but a copy left there by an older install must not shadow the
-        // script shipped with this build.
+        // The worker script is part of the binary's contract. A release build
+        // must use the bundled resource; a debug build must use the checkout,
+        // because the executable can live outside `target/` (a custom
+        // CARGO_TARGET_DIR) and Tauri then resolves `Resource` to the installed
+        // package, whose older script would shadow the one being worked on. The
+        // app-data directory is searched last: it is writable and holds the
+        // Python venv, but a copy left there must not shadow a shipped script.
         let mut tts_roots = Vec::new();
-        if let Some(resource_root) = resource_root {
-            tts_roots.push(resource_root);
-        }
         if include_project_tts_root() {
             tts_roots.push(project_root);
+        }
+        if let Some(resource_root) = resource_root {
+            tts_roots.push(resource_root);
         }
         tts_roots.push(writable_tts_root.clone());
 
@@ -77,6 +79,7 @@ pub fn run() {
             app.manage(BookmarkState::new());
             app.manage(SettingsState::new());
             app.manage(SearchState::new());
+            app.manage(commands::tts::TtsSetupState::default());
 
             // Reclaim disk before the first clip, on a worker so the window opens
             // without waiting on a directory walk over a large cache.
@@ -114,6 +117,7 @@ pub fn run() {
             commands::tafsir_voice::pause_tafsir_voice,
             commands::tafsir_voice::resume_tafsir_voice,
             commands::tts::get_tts_voice_status,
+            commands::tts::setup_tts_runtime,
             commands::bookmark::get_bookmarks,
             commands::bookmark::add_bookmark,
             commands::bookmark::remove_bookmark,
@@ -137,14 +141,19 @@ mod tests {
     }
 
     #[test]
-    fn app_state_prioritizes_bundled_tts_over_app_data() {
+    fn app_state_searches_the_checkout_before_bundled_tts_in_debug() {
         let resource_root = std::path::PathBuf::from("/tmp/equran-resource");
         let writable_root = std::path::PathBuf::from("/tmp/equran-writable");
         let state = AppState::new(Some(resource_root.clone()), Some(writable_root.clone()))
             .expect("AppState should initialize");
 
-        assert_eq!(state.tts_roots().first(), Some(&resource_root));
-        assert_eq!(state.tts_roots().last(), Some(&writable_root));
+        let roots = state.tts_roots();
+        // A debug build may resolve `Resource` to an installed package; the
+        // checkout under test has to win, and app-data still comes last.
+        assert!(include_project_tts_root());
+        assert_ne!(roots.first(), Some(&resource_root));
+        assert!(roots.contains(&resource_root));
+        assert_eq!(roots.last(), Some(&writable_root));
     }
 
     #[test]
