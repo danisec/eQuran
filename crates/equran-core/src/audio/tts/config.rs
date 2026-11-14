@@ -138,9 +138,15 @@ pub(super) fn interpreter_version(python: &Path) -> Option<String> {
 /// Probes `import supertonic` once per interpreter path.
 ///
 /// Spawning a Python process costs hundreds of milliseconds, and readiness is
-/// queried on every playback command, so results are memoized for the lifetime
-/// of the process. A bare interpreter name such as `python3` is resolved
+/// queried on every playback command, so a definitive answer is memoized for the
+/// lifetime of the process. A bare interpreter name such as `python3` is resolved
 /// through `PATH` first, so the cache key is the real executable.
+///
+/// Only a real answer is remembered. Under load a spawn can fail transiently
+/// (`ETXTBSY` just after a file is written, `EAGAIN` when the process table is
+/// full); caching such a failure would disable the voice for the rest of the
+/// session over a momentary hiccup, so those are retried and, if they persist,
+/// left uncached.
 pub(super) fn supertonic_module_available(python: &Path) -> bool {
     static CACHE: OnceLock<StdMutex<HashMap<PathBuf, bool>>> = OnceLock::new();
 
@@ -158,21 +164,44 @@ pub(super) fn supertonic_module_available(python: &Path) -> bool {
         return *cached;
     }
 
-    let available = std::process::Command::new(&key)
-        .arg("-c")
-        .arg("import supertonic")
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
-        .map(|status| status.success())
-        .unwrap_or(false);
-
-    if let Ok(mut guard) = cache.lock() {
-        guard.insert(key, available);
+    match probe_supertonic(&key) {
+        Some(available) => {
+            if let Ok(mut guard) = cache.lock() {
+                guard.insert(key, available);
+            }
+            available
+        }
+        // Never cache "could not even try"; the next call gets a fresh attempt.
+        None => false,
     }
+}
 
-    available
+/// Runs the import probe, retrying a transient spawn failure a few times.
+///
+/// Returns `Some(true/false)` for a real answer (the interpreter ran and either
+/// did or did not import the package) and `None` when it could not be executed
+/// at all.
+fn probe_supertonic(python: &Path) -> Option<bool> {
+    const ATTEMPTS: u32 = 4;
+    for attempt in 0..ATTEMPTS {
+        let result = std::process::Command::new(python)
+            .arg("-c")
+            .arg("import supertonic")
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status();
+        match result {
+            Ok(status) => return Some(status.success()),
+            Err(error) if attempt + 1 < ATTEMPTS => {
+                // `ETXTBSY` and friends clear on their own within milliseconds.
+                let _ = error;
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            }
+            Err(_) => return None,
+        }
+    }
+    None
 }
 
 /// Resolves a bare executable name through `PATH`.
