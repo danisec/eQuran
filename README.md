@@ -67,10 +67,8 @@ so and keeps playing the qari.
 ## Quick start
 
 The fastest path to a working app is a package — see
-[Desktop packages](#desktop-packages) (packages currently carry the earlier voice
-engine; a source build has the current one). To run from a checkout, prepare the
-speech runtime once and start the app; Tauri builds and serves the frontend for
-you:
+[Desktop packages](#desktop-packages). To run from a checkout, prepare the speech
+runtime once and start the app; Tauri builds and serves the frontend for you:
 
 ```bash
 git clone https://github.com/danisec/eQuran.git
@@ -99,27 +97,29 @@ and DEB packages for x86_64. Pick the one for your distribution.
 **RPM (Fedora, RHEL, openSUSE):**
 
 ```bash
-sudo dnf install https://github.com/danisec/eQuran/releases/download/voice-v1/eQuran-1.0.0-1.x86_64.rpm
+sudo dnf install https://github.com/danisec/eQuran/releases/download/v1.1.0/eQuran-1.1.0-1.x86_64.rpm
 ```
 
 **DEB (Debian, Ubuntu, Mint):**
 
 ```bash
-wget https://github.com/danisec/eQuran/releases/download/voice-v1/eQuran_1.0.0_amd64.deb
-sudo apt install ./eQuran_1.0.0_amd64.deb
+wget https://github.com/danisec/eQuran/releases/download/v1.1.0/eQuran_1.1.0_amd64.deb
+sudo apt install ./eQuran_1.1.0_amd64.deb
 ```
 
 Launch **eQuran** from your application menu, or run `equran-desktop`.
 
-> [!NOTE]
-> The published `voice-v1` packages carry the **earlier** speech engine (Coqui TTS
-> with a downloaded voice pack), not the Supertonic 3 pipeline this README
-> describes. Reading, search, marks and qari recitation are the same; if you want
-> the current on-device translation voice, build the desktop app
-> [from source](#build-from-source). A package refresh is pending.
+Reading, search, marks, qari recitation and the Supertonic 3 translation voice all
+work from the package. The speech runtime is prepared once:
 
-Recitation and reading in the packages need no extra setup. To enable the voice
-described under [Translation voice](#translation-voice), use a source build.
+```bash
+bash /usr/lib/eQuran/tts/setup.sh
+```
+
+> [!NOTE]
+> Older `voice-v1` packages carry the earlier Coqui TTS engine with a downloaded
+> voice pack. They are superseded by the `v1.1.0` packages above, which ship the
+> Supertonic 3 pipeline this README describes.
 
 ### Build from source
 
@@ -285,7 +285,7 @@ about those services, used for interoperability.
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| Translation voice never speaks; Settings shows a notice | Speech runtime missing | `bash tts/setup.sh`, then restart (source build) |
+| Translation voice never speaks; Settings shows a notice | Speech runtime missing | `bash tts/setup.sh` (packages: `/usr/lib/eQuran/tts/setup.sh`), then restart |
 | Notice names a Python or interpreter error | `python3` is newer than the ONNX wheels support | Let `setup.sh` pick 3.12–3.14, or set `EQURAN_TTS_PYTHON` |
 | Narration is slow | No GPU build of ONNX Runtime | `bash tts/setup-gpu.sh`, or lower `EQURAN_TTS_SUPERTONIC_STEPS` |
 | Qari audio does not play on a source build | Built without the audio feature | `cargo build --release --features audio` |

@@ -5,16 +5,24 @@ versioning](https://semver.org) for its public interfaces once they settle;
 until 1.0 is tagged on `master`, treat the CLI flags and the settings file as the
 things most worth watching.
 
-## Unreleased
+## 1.1.0
+
+The speech engine changed: translation and tafsir are now spoken on-device by
+**Supertonic 3**, replacing the Coqui TTS engine and its downloaded voice pack.
+The Linux packages are rebuilt around the new runtime.
 
 ### Added
 
+* On-device **Supertonic 3** speech for translation and tafsir, with CPU and GPU
+  setup scripts. The model (~400 MB) is fetched on first synthesis; there is no
+  voice-pack download and no fallback engine.
 * A storage panel in Settings → Advanced: cache used against the cap, a
   per-kind breakdown (qari, translation, tafsir), and a **Clear cache** button.
 * Startup cache maintenance: leftover `.part` files from interrupted renders are
   swept, and least-recently-used media is evicted down to a 2 GB cap
   (`EQURAN_TTS_CACHE_LIMIT_MB`, `0` disables it).
 * English tafsir narration from UmmahAPI (*Ma'arif al-Qur'an*).
+* Continuous integration for the Rust workspace and the frontend.
 
 ### Changed
 
@@ -29,14 +37,16 @@ things most worth watching.
 
 ### Fixed
 
+* A readiness probe that failed to spawn was cached as "the speech package is
+  missing", so a momentary hiccup disabled the voice for the rest of the session.
 * The tafsir cache is keyed by language, so an Indonesian and an English render
   of the same ayah no longer collide.
 * The interface follows the chosen translation language instead of staying
   Indonesian.
 
-## Earlier work
+### Earlier work
 
-Before the cache and English-tafsir work, the desktop app was rebuilt around
-search, marks and a session-based player, the TTS runtime was split into focused
-modules, and the previous voice-pack installer was replaced by the Supertonic 3
-setup scripts. See the commit history for the details.
+Before this release the desktop app was rebuilt around search, marks and a
+session-based player, the TTS runtime was split into focused modules, and the
+previous voice-pack installer was replaced by the Supertonic 3 setup scripts. See
+the commit history for the details.

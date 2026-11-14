@@ -1,5 +1,5 @@
 Name:           equran-cli
-Version:        1.0.0
+Version:        1.1.0
 Release:        1%{?dist}
 Summary:        Al-Quran CLI player with qari audio and TTS translation
 License:        MIT
@@ -31,5 +31,5 @@ install -Dm755 target/release/equran-cli %{buildroot}%{_bindir}/equran-cli
 %doc tts/tts_supertonic.py
 %{_bindir}/equran-cli
 %changelog
-* Fri Nov 14 2026 eQuran Maintainers <maintainers@example.invalid> - 1.0.0-1
-- Track the 1.0.0 release; drop the unused espeak-ng dependency
+* Fri Nov 14 2026 eQuran Maintainers <maintainers@example.invalid> - 1.1.0-1
+- Track the 1.1.0 release; drop the unused espeak-ng dependency
