@@ -65,7 +65,12 @@ export async function setupTtsRuntime(): Promise<string> {
 
     const result = await invoke<TtsVoiceStatusPayload>('setup_tts_runtime');
     applyTtsVoiceStatus(result);
-    if (!result.ready) {
+    if (result.ready) {
+      // A freshly built runtime should read translations by default. The
+      // earlier "not ready" status turned the toggle off, so restore it now
+      // instead of leaving the reader to enable it by hand after setup.
+      playbackState.ttsEnabled = true;
+    } else {
       error = result.detail || 'Setup finished but the voice is still not ready.';
     }
   } catch (invokeError) {

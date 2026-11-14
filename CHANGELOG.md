@@ -7,6 +7,14 @@ things most worth watching.
 
 ## Unreleased
 
+## 1.1.2
+
+### Fixed
+
+* After **Set up voice** succeeds, the translation voice is enabled again by
+  default. The "not ready" status turned the toggle off, and a successful setup
+  left it off, so a reader had to enable it by hand before hearing translations.
+
 ## 1.1.1
 
 ### Added
