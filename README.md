@@ -97,14 +97,14 @@ and DEB packages for x86_64. Pick the one for your distribution.
 **RPM (Fedora, RHEL, openSUSE):**
 
 ```bash
-sudo dnf install https://github.com/danisec/eQuran/releases/download/v1.1.0/eQuran-1.1.0-1.x86_64.rpm
+sudo dnf install https://github.com/danisec/eQuran/releases/download/v1.1.1/eQuran-1.1.1-1.x86_64.rpm
 ```
 
 **DEB (Debian, Ubuntu, Mint):**
 
 ```bash
-wget https://github.com/danisec/eQuran/releases/download/v1.1.0/eQuran_1.1.0_amd64.deb
-sudo apt install ./eQuran_1.1.0_amd64.deb
+wget https://github.com/danisec/eQuran/releases/download/v1.1.1/eQuran_1.1.1_amd64.deb
+sudo apt install ./eQuran_1.1.1_amd64.deb
 ```
 
 Launch **eQuran** from your application menu, or run `equran-desktop`.
@@ -122,7 +122,7 @@ VENV_DIR="$HOME/.local/share/id.equran.desktop/tts/.venv" bash /usr/lib/eQuran/t
 
 > [!NOTE]
 > Older `voice-v1` packages carry the earlier Coqui TTS engine with a downloaded
-> voice pack. They are superseded by the `v1.1.0` packages above, which ship the
+> voice pack. They are superseded by the packages above, which ship the
 > Supertonic 3 pipeline this README describes.
 
 ### Build from source

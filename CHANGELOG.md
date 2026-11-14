@@ -7,6 +7,8 @@ things most worth watching.
 
 ## Unreleased
 
+## 1.1.1
+
 ### Added
 
 * **Set up voice** in Settings → Translation voice. The app now prepares the
