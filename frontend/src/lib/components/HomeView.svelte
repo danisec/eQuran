@@ -1,9 +1,16 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import Icon from '$lib/components/Icon.svelte';
+  import { JUZ_RANGES, revelationOf } from '$lib/data/quranGrouping';
   import { highlightSegments } from '$lib/highlight';
   import { formatNumber, locale, revelationLabel, surahMeaning, t } from '$lib/i18n';
   import { bookmarkState, loadBookmarks } from '$lib/stores/bookmarks.svelte';
+  import {
+    homeIndexState,
+    setIndexTab,
+    toggleAlphabetDirection,
+    type IndexTab
+  } from '$lib/stores/homeIndex.svelte';
   import { playFromAyah, playbackState } from '$lib/stores/playback.svelte';
   import {
     clearSearch,
@@ -53,6 +60,48 @@
   // The backend appends on add, so the last entry is the most recent mark.
   let lastBookmark = $derived(bookmarkState.list[bookmarkState.list.length - 1]);
   let surahIndex = $derived(allSurahs());
+
+  /** How the index below the search is grouped. */
+  let indexTab = $derived(homeIndexState.tab);
+
+  const indexTabs: { id: IndexTab; label: string }[] = [
+    { id: 'surah', label: 'home.tabSurah' },
+    { id: 'juz', label: 'home.tabJuz' },
+    { id: 'revelation', label: 'home.tabRevelation' },
+    { id: 'alphabet', label: 'home.tabAlphabet' }
+  ];
+
+  /**
+   * Alphabetical order is the only list with a direction: readers look for a
+   * name from either end. The order of revelation has one meaning (first
+   * revealed to last), so it stays fixed and gets no toggle.
+   */
+  let alphabetDesc = $derived(homeIndexState.alphabetDesc);
+
+  let sortLabel = $derived(alphabetDesc ? 'Z–A' : 'A–Z');
+
+  function toggleSort() {
+    if (indexTab === 'alphabet') toggleAlphabetDirection();
+  }
+
+  // Juz is a list of ranges, not surahs, so it reads its own table.
+  let indexRows = $derived.by(() => {
+    if (indexTab === 'revelation') {
+      return [...surahIndex].sort((a, b) => revelationOf(a.nomor) - revelationOf(b.nomor));
+    }
+    if (indexTab === 'alphabet') {
+      const direction = alphabetDesc ? -1 : 1;
+      return [...surahIndex].sort(
+        (a, b) => direction * a.namaLatin.localeCompare(b.namaLatin, 'id')
+      );
+    }
+    return surahIndex;
+  });
+
+  /** A juz part needs the surah's own name and meaning, not just its number. */
+  function surahByNumber(number: number) {
+    return surahIndex.find((surah) => surah.nomor === number);
+  }
 
   /** Open a surah from the index or from a search hit. */
   async function openSurah(number: number) {
@@ -278,23 +327,108 @@
         {/if}
 
         <!-- The index of the book: 114 surahs, the thing a mushaf opens with -->
-        <h2 class="section-label mb-3 mt-8">{t('home.surahIndex')}</h2>
-        <div class="grid grid-cols-2 gap-3 xl:grid-cols-3">
-          {#each surahIndex as surah (surah.nomor)}
-            <button
-              class="surah-tile {surahState.selected.nomor === surah.nomor ? 'is-current' : ''}"
-              type="button"
-              onclick={() => openSurah(surah.nomor)}
-            >
-              <span class="nav-row-index">{String(surah.nomor).padStart(3, '0')}</span>
-              <span class="min-w-0 flex-1">
-                <span class="surah-tile-name">{surah.namaLatin}</span>
-                <span class="meta mt-1 block">{surahMeaning(surah.nomor, surah.arti)} · {surah.jumlahAyat} {t('play.ayahCount')}</span>
-              </span>
-              <span class="surah-tile-arabic arabic">{surah.nama}</span>
-            </button>
-          {/each}
+        <div class="mt-8 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+          <h2 class="section-label">{t('home.browse')}</h2>
+          <div class="flex flex-wrap items-center gap-2">
+            <div class="index-tabs" role="tablist" aria-label={t('home.browse')}>
+              {#each indexTabs as tab (tab.id)}
+                <button
+                  class="index-tab"
+                  class:is-active={indexTab === tab.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={indexTab === tab.id}
+                  onclick={() => setIndexTab(tab.id)}
+                >
+                  {t(tab.label)}
+                </button>
+              {/each}
+            </div>
+            {#if indexTab === 'alphabet'}
+              <!-- Sort direction belongs to the content, so it sits next to the
+                   list rather than becoming a fifth tab. -->
+              <button
+                class="sort-toggle tnum"
+                type="button"
+                aria-label={t('home.sortDirection')}
+                onclick={toggleSort}
+              >
+                {sortLabel}
+                <Icon name={alphabetDesc ? 'chevron-down' : 'chevron-up'} size={13} />
+              </button>
+            {/if}
+          </div>
         </div>
+
+        {#if indexTab === 'juz'}
+          <div class="mt-6 flex flex-col gap-8">
+            {#each JUZ_RANGES as range (range.juz)}
+              <section class="juz-section" aria-labelledby={`juz-${range.juz}`}>
+                <div class="juz-head">
+                  <h3 class="juz-title" id={`juz-${range.juz}`}>
+                    {t('home.juzTitle', range.juz)}
+                  </h3>
+                  <span class="juz-meta tnum">
+                    {range.startSurah}:{range.startAyah} – {range.endSurah}:{range.endAyah}
+                    · {formatNumber(range.verses)}
+                    {t('play.ayahCount')}
+                  </span>
+                </div>
+
+                <div class="mt-3 grid grid-cols-2 gap-3 xl:grid-cols-3">
+                  {#each range.parts as part (part.surah)}
+                    {@const surah = surahByNumber(part.surah)}
+                    <button
+                      class="surah-tile {surahState.selected.nomor === part.surah ? 'is-current' : ''}"
+                      type="button"
+                      onclick={() => openVerse(part.surah, part.from)}
+                    >
+                      <span class="nav-row-index">{String(part.surah).padStart(3, '0')}</span>
+                      <span class="min-w-0 flex-1">
+                        <span class="surah-tile-name">{surah?.namaLatin ?? part.surah}</span>
+                        <span class="meta mt-1 block">
+                          {surahMeaning(part.surah, surah?.arti ?? '')} ·
+                          {#if part.from > 1}
+                            <span class="juz-continued">{t('home.continued')}</span> ·
+                          {/if}
+                          <span class="juz-range">
+                            {t('home.ayahRange', part.from, part.to)}
+                          </span>
+                        </span>
+                      </span>
+                      {#if surah}
+                        <span class="surah-tile-arabic arabic">{surah.nama}</span>
+                      {/if}
+                    </button>
+                  {/each}
+                </div>
+              </section>
+            {/each}
+          </div>
+        {:else}
+          <div class="mt-4 grid grid-cols-2 gap-3 xl:grid-cols-3">
+            {#each indexRows as surah (surah.nomor)}
+              <button
+                class="surah-tile {surahState.selected.nomor === surah.nomor ? 'is-current' : ''}"
+                type="button"
+                onclick={() => openSurah(surah.nomor)}
+              >
+                <span class="nav-row-index">{String(surah.nomor).padStart(3, '0')}</span>
+                <span class="min-w-0 flex-1">
+                  <span class="surah-tile-name">{surah.namaLatin}</span>
+                  <span class="meta mt-1 block">
+                    {surahMeaning(surah.nomor, surah.arti)} · {surah.jumlahAyat}
+                    {t('play.ayahCount')}
+                    {#if indexTab === 'revelation'}
+                      · {t('home.revealed', revelationOf(surah.nomor))}
+                    {/if}
+                  </span>
+                </span>
+                <span class="surah-tile-arabic arabic">{surah.nama}</span>
+              </button>
+            {/each}
+          </div>
+        {/if}
       {/if}
     </div>
   </div>
@@ -369,6 +503,95 @@
   border-color: var(--accent);
   background: var(--accent-soft);
   color: var(--accent);
+}
+
+.index-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  width: fit-content;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--raised);
+}
+
+.index-tab {
+  height: 30px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  transition:
+    background-color var(--speed-fast) var(--ease),
+    color var(--speed-fast) var(--ease);
+}
+
+.index-tab:hover {
+  color: var(--text);
+}
+
+.index-tab.is-active {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow-card);
+}
+
+/* Sort direction: a quiet control next to the list it orders, borderless so
+   it does not read as a fifth tab */
+.sort-toggle {
+  display: inline-flex;
+  height: 30px;
+  align-items: center;
+  gap: 4px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 500;
+  transition: color var(--speed-fast) var(--ease);
+}
+
+.sort-toggle:hover {
+  color: var(--text);
+}
+
+.sort-toggle :global(svg) {
+  color: var(--text-muted);
+}
+
+/* Juz reads as 30 titled groups: one heading, then the cards of the surahs
+   inside it, in the same shape as the surah index */
+.juz-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+}
+
+.juz-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.juz-meta {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.juz-range {
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+}
+
+/* The card starts mid-surah, so the juz only holds its tail */
+.juz-continued {
+  color: var(--text-secondary);
 }
 
 .result-row {

@@ -19,6 +19,7 @@
     | 'check'
     | 'close'
     | 'chevron-down'
+    | 'chevron-up'
     | 'chevron-left'
     | 'chevron-right'
     | 'maximize'
@@ -96,6 +97,8 @@
     <path d="m6 6 12 12M18 6 6 18" />
   {:else if name === 'chevron-down'}
     <path d="m6 9.5 6 6 6-6" />
+  {:else if name === 'chevron-up'}
+    <path d="m6 14.5 6-6 6 6" />
   {:else if name === 'chevron-left'}
     <path d="m14 6-6 6 6 6" />
   {:else if name === 'chevron-right'}

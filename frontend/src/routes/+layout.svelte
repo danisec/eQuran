@@ -12,6 +12,7 @@
   import { destroySearchListeners } from '$lib/stores/search.svelte';
   import { initTheme } from '$lib/stores/theme.svelte';
   import { initPanels } from '$lib/stores/panels.svelte';
+  import { initHomeIndex } from '$lib/stores/homeIndex.svelte';
   import { initView } from '$lib/stores/view.svelte';
 
   let { children } = $props();
@@ -25,6 +26,7 @@
   onMount(() => {
     initTheme();
     initPanels();
+    initHomeIndex();
     initView();
     void loadSettings();
     void initPlaybackListeners();
