@@ -1,3 +1,5 @@
+import { getCurrentWindow } from '@tauri-apps/api/window';
+
 type ThemeMode = 'light' | 'dark';
 
 type Origin = { x: number; y: number };
@@ -57,6 +59,17 @@ function commit(nextTheme: ThemeMode) {
   document.documentElement.classList.toggle('dark', nextTheme === 'dark');
   document.documentElement.style.colorScheme = nextTheme;
   localStorage.setItem(STORAGE_KEY, nextTheme);
+
+  // The titlebar (minimise, maximise, close) is native chrome drawn by the
+  // system, not by the webview, so it would stay on the system GTK theme while
+  // the content flips. Tell the window which theme to use so the two agree.
+  try {
+    getCurrentWindow()
+      .setTheme(nextTheme)
+      .catch(() => {});
+  } catch {
+    // Not running under Tauri (e.g. a plain browser dev tab): nothing to sync.
+  }
 }
 
 /**

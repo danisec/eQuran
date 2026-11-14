@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- eQuran app mark: an open mushaf on ink, with the verse rosette as its seal. -->
+  <rect x="56" y="56" width="912" height="912" rx="214" fill="#16293c"/>
+  <g fill="#d78d72" transform="translate(512 404)">
+    <polygon transform="translate(-56 -56) scale(1.75)"
+      points="32,3 40,10 50,8 54,17 63,21 60,31 64,40 56,47 57,57 47,58 40,64 32,58 24,64 17,57 7,57 8,47 0,40 4,31 1,21 10,17 14,8 24,10"/>
+  </g>
+  <g fill="#f5f8fb">
+    <path d="M512 516 C 420 472 286 480 214 522 L 214 740 C 286 698 420 690 512 734 Z"/>
+    <path d="M512 516 C 604 472 738 480 810 522 L 810 740 C 738 698 604 690 512 734 Z"/>
+  </g>
+  <path d="M512 516 L 512 734" stroke="#16293c" stroke-width="16" stroke-linecap="round"/>
+</svg>

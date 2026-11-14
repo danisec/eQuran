@@ -97,14 +97,14 @@ and DEB packages for x86_64. Pick the one for your distribution.
 **RPM (Fedora, RHEL, openSUSE):**
 
 ```bash
-sudo dnf install https://github.com/danisec/eQuran/releases/download/v1.1.2/eQuran-1.1.2-1.x86_64.rpm
+sudo dnf install https://github.com/danisec/eQuran/releases/download/v1.1.3/eQuran-1.1.3-1.x86_64.rpm
 ```
 
 **DEB (Debian, Ubuntu, Mint):**
 
 ```bash
-wget https://github.com/danisec/eQuran/releases/download/v1.1.2/eQuran_1.1.2_amd64.deb
-sudo apt install ./eQuran_1.1.2_amd64.deb
+wget https://github.com/danisec/eQuran/releases/download/v1.1.3/eQuran_1.1.3_amd64.deb
+sudo apt install ./eQuran_1.1.3_amd64.deb
 ```
 
 Launch **eQuran** from your application menu, or run `equran-desktop`.

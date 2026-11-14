@@ -7,6 +7,22 @@ things most worth watching.
 
 ## Unreleased
 
+## 1.1.3
+
+### Changed
+
+* A new application icon: an open mushaf on ink with the verse rosette as its
+  seal, drawn in the app's own palette instead of a green-and-gold ornament.
+  It stays legible from a 16px launcher entry to the 512px package image, and
+  every platform icon (Linux, Windows, macOS, Android, iOS) is regenerated from
+  one master.
+
+### Fixed
+
+* The window titlebar now follows the app's dark/light mode where the system
+  GTK theme supports both variants, instead of staying on the system theme while
+  the content flips.
+
 ## 1.1.2
 
 ### Fixed
