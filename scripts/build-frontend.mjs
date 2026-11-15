@@ -3,32 +3,27 @@
 //
 // The main `tauri.conf.json` finds the frontend with a POSIX shell loop
 // (`sh -c 'while [ ! -f ... ]'`), which assumes a shell that Windows does not
-// ship. This script walks the same path in Node, which is always present
-// because the frontend itself is a Node project, then runs the frontend build.
+// ship. This script does the same job in Node, which is always present because
+// the frontend itself is a Node project.
 //
-// Tauri runs `beforeBuildCommand` from the directory that holds the config, so
-// the walk starts there and climbs to the repository root.
+// The repository root is derived from this file's own location rather than the
+// working directory: Tauri does not run `beforeBuildCommand` from a stable cwd,
+// and on Windows it ran one level too high, so a relative path missed the tree.
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
-import { dirname, join, parse } from "node:path";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-/** Returns the `frontend` directory that owns a package.json, walking upward. */
-function findFrontend(start) {
-  const { root } = parse(start);
-  let dir = start;
-  for (;;) {
-    const candidate = join(dir, "frontend", "package.json");
-    if (existsSync(candidate)) return join(dir, "frontend");
-    if (dir === root) return null;
-    dir = dirname(dir);
-  }
-}
+// This file lives at <repo>/scripts/build-frontend.mjs.
+const scriptDir = dirname(fileURLToPath(import.meta.url));
+const repoRoot = dirname(scriptDir);
+const frontend = join(repoRoot, "frontend");
 
-// `process.cwd()` is the crate directory Tauri runs the command from.
-const frontend = findFrontend(process.cwd());
-if (frontend === null) {
-  console.error("build-frontend: no frontend/package.json found above", process.cwd());
+if (!existsSync(join(frontend, "package.json"))) {
+  console.error(
+    `build-frontend: no frontend/package.json at ${frontend}. ` +
+      `The script is at ${scriptDir}; is the checkout complete?`,
+  );
   process.exit(1);
 }
 
