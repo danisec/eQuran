@@ -7,6 +7,23 @@ things most worth watching.
 
 ## Unreleased
 
+## 1.1.4
+
+### Added
+
+* The home index switches between four groupings instead of listing surahs 1–114
+  only: **Juz** (30 titled groups, each showing the slice of the surah the juz
+  holds and a `lanjutan` marker when it starts mid-surah), **Revelation order**
+  (the Egyptian order) and **A–Z** with a direction toggle. Juz boundaries and
+  the order of revelation are fixed tables, so no request is needed.
+
+### Fixed
+
+* The chosen home grouping and the A–Z direction survive a trip into the reader.
+  The state used to live inside the home component, which unmounts when a surah
+  opens, so the index snapped back to **Surah** on every return; it now lives in
+  a store and is remembered in `localStorage`.
+
 ## 1.1.3
 
 ### Changed
