@@ -1,8 +1,14 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "build": {
-    "beforeDevCommand": "npm run dev --prefix ../../frontend -- --host 127.0.0.1",
-    "beforeBuildCommand": "node ../../scripts/build-frontend.mjs"
+    "beforeDevCommand": {
+      "script": "npm run dev --prefix frontend -- --host 127.0.0.1",
+      "cwd": "../../"
+    },
+    "beforeBuildCommand": {
+      "script": "node scripts/build-frontend.mjs",
+      "cwd": "../../"
+    }
   },
   "bundle": {
     "targets": ["nsis"],
