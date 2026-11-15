@@ -1,0 +1,60 @@
+name: Windows build
+
+# Produces the Windows installer (.exe). Kept separate from CI because it is
+# slow and only matters when a release is cut or someone asks for it by hand.
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+concurrency:
+  group: windows-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Build Windows installer
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: crates/equran-desktop
+
+      # The frontend's beforeBuildCommand runs `npm run build` in this tree.
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      # The repo builds the desktop app with the Tauri CLI. It is not a
+      # declared npm dependency, so install it here rather than assume it.
+      - name: Install Tauri CLI
+        run: npm install -g @tauri-apps/cli@^2
+
+      # tauri.windows.conf.json is picked up automatically and targets NSIS,
+      # so this yields an .exe installer rather than the Linux bundles.
+      - name: Build
+        working-directory: crates/equran-desktop
+        run: tauri build
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: eQuran-windows-x64
+          path: |
+            crates/equran-desktop/target/release/bundle/nsis/*.exe
+            crates/equran-desktop/target/release/bundle/msi/*.msi
+          if-no-files-found: error

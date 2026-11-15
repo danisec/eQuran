@@ -1,6 +1,8 @@
 //! Runtime, splitting and worker-protocol tests.
 
-use super::config::{SupertonicConfig, status_from_config};
+use super::config::SupertonicConfig;
+#[cfg(unix)]
+use super::config::status_from_config;
 use super::text::{sanitize_for_speech, split_text_for_tts};
 use super::*;
 
@@ -33,6 +35,9 @@ fn prefers_project_venv_python_when_present() {
     assert_eq!(config.python, resource_root.join("tts/.venv/bin/python"));
 }
 
+// The interpreter stubs below are POSIX shell scripts, so the tests that run
+// them only apply on Unix. The path-resolution and text tests stay portable.
+#[cfg(unix)]
 #[test]
 fn ignores_gpu_venv_that_cannot_import_supertonic() {
     let temp_dir = tempfile::tempdir().expect("temp dir should be created");
@@ -68,6 +73,7 @@ fn reports_missing_script() {
     assert_eq!(engine.voice_status(), TtsVoiceStatus::MissingScript);
 }
 
+#[cfg(unix)]
 #[test]
 fn reports_missing_runtime_when_python_cannot_import_supertonic() {
     let temp_dir = tempfile::tempdir().expect("temp dir should be created");
@@ -93,6 +99,7 @@ fn reports_missing_runtime_when_python_cannot_import_supertonic() {
     assert_eq!(status_from_config(&config), TtsVoiceStatus::MissingRuntime);
 }
 
+#[cfg(unix)]
 #[test]
 fn reports_ready_when_python_imports_supertonic() {
     let temp_dir = tempfile::tempdir().expect("temp dir should be created");
@@ -118,20 +125,15 @@ fn reports_ready_when_python_imports_supertonic() {
     assert_eq!(status_from_config(&config), TtsVoiceStatus::Ready);
 }
 
+#[cfg(unix)]
 fn make_executable(path: &Path) {
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
+    use std::os::unix::fs::PermissionsExt;
 
-        let mut permissions = std::fs::metadata(path)
-            .expect("metadata should be readable")
-            .permissions();
-        permissions.set_mode(0o755);
-        std::fs::set_permissions(path, permissions).expect("permissions should be set");
-    }
-
-    #[cfg(not(unix))]
-    let _ = path;
+    let mut permissions = std::fs::metadata(path)
+        .expect("metadata should be readable")
+        .permissions();
+    permissions.set_mode(0o755);
+    std::fs::set_permissions(path, permissions).expect("permissions should be set");
 }
 
 #[test]
@@ -242,6 +244,7 @@ fn tafsir_chunks_never_contain_arabic_script() {
 /// It satisfies the `import supertonic` readiness probe and otherwise runs
 /// the host Python, so the tests exercise the service protocol instead of
 /// whatever packages the machine happens to have installed.
+#[cfg(unix)]
 fn write_stub_python(path: &Path) {
     use std::os::unix::fs::PermissionsExt;
 
@@ -269,6 +272,7 @@ fn builds_unique_temporary_paths() {
     assert!(first.to_string_lossy().ends_with(".part"));
 }
 
+#[cfg(unix)]
 #[tokio::test]
 async fn uses_persistent_service_protocol() {
     let temp_dir = tempfile::tempdir().expect("temp dir should be created");
@@ -329,6 +333,7 @@ for line in sys.stdin:
     );
 }
 
+#[cfg(unix)]
 #[tokio::test]
 async fn service_error_does_not_poison_next_request() {
     let temp_dir = tempfile::tempdir().expect("temp dir should be created");
@@ -393,6 +398,7 @@ for line in sys.stdin:
     );
 }
 
+#[cfg(unix)]
 #[test]
 fn forgets_the_cached_probe_answer_after_setup_installs_the_package() {
     use std::os::unix::fs::PermissionsExt;
