@@ -32,7 +32,7 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: crates/equran-desktop
+          workspaces: "."
 
       # The frontend's beforeBuildCommand runs `npm run build` in this tree.
       - name: Install frontend dependencies
@@ -55,6 +55,6 @@ jobs:
         with:
           name: eQuran-windows-x64
           path: |
-            crates/equran-desktop/target/release/bundle/nsis/*.exe
-            crates/equran-desktop/target/release/bundle/msi/*.msi
+            target/release/bundle/nsis/*.exe
+            target/release/bundle/msi/*.msi
           if-no-files-found: error
