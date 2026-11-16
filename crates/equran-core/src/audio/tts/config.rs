@@ -27,7 +27,7 @@ impl SupertonicConfig {
             .map(PathBuf::from)
             .unwrap_or_else(|| first_project_file(project_roots, "tts/tts_supertonic.py"));
 
-        let venv_python = first_project_file(project_roots, "tts/.venv/bin/python");
+        let venv_python = first_project_file(project_roots, &venv_interpreter_relative(".venv"));
         let uses_project_venv = venv_python.is_file();
         let python = std::env::var_os("EQURAN_TTS_PYTHON")
             .map(PathBuf::from)
@@ -35,13 +35,13 @@ impl SupertonicConfig {
                 if uses_project_venv {
                     venv_python
                 } else {
-                    PathBuf::from("python3")
+                    PathBuf::from(system_python())
                 }
             });
 
         // A GPU-capable ONNX Runtime wheel can be installed into a side venv
         // without touching the system interpreter. Prefer it when present.
-        let gpu_python = first_project_file(project_roots, "tts/.venv-gpu/bin/python");
+        let gpu_python = first_project_file(project_roots, &venv_interpreter_relative(".venv-gpu"));
         let gpu_python = gpu_python.is_file().then_some(gpu_python);
 
         let voice = std::env::var("EQURAN_TTS_SUPERTONIC_VOICE")
@@ -120,6 +120,31 @@ pub(super) fn first_project_file(project_roots: &[PathBuf], relative_path: &str)
                 .map(|root| root.join(relative_path))
                 .unwrap_or_else(|| PathBuf::from(relative_path))
         })
+}
+
+/// The venv interpreter path inside `venv_name`, per platform.
+///
+/// A POSIX venv keeps its interpreter at `bin/python`; a Windows venv at
+/// `Scripts\python.exe`. The forward slash works on both because Windows path
+/// APIs accept it, so one string per platform is enough.
+pub(super) fn venv_interpreter_relative(venv_name: &str) -> String {
+    if cfg!(windows) {
+        format!("tts/{venv_name}/Scripts/python.exe")
+    } else {
+        format!("tts/{venv_name}/bin/python")
+    }
+}
+
+/// The interpreter name tried when no venv exists.
+///
+/// Windows installs `python.exe` (and a `py` launcher) onto PATH; POSIX
+/// traditionally names the Python 3 binary `python3`.
+pub(super) fn system_python() -> &'static str {
+    if cfg!(windows) {
+        "python"
+    } else {
+        "python3"
+    }
 }
 
 /// Reads the interpreter's version as `major.minor.patch`, or `None` when it

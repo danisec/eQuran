@@ -57,9 +57,18 @@ tidak siap, TTS dinonaktifkan dengan pesan yang bisa ditindaklanjuti.
 
 #### Setup Runtime
 
+POSIX (Linux/macOS):
+
 ```bash
 cd tts
 bash setup.sh
+```
+
+Windows:
+
+```powershell
+cd tts
+powershell -ExecutionPolicy Bypass -File setup.ps1
 ```
 
 Model (~400 MB) diunduh otomatis saat sintesis pertama dan disimpan di
@@ -71,11 +80,13 @@ Aplikasi mencari interpreter dan script dengan urutan:
 
 ```text
 1. EQURAN_TTS_PYTHON (jika diset)
-2. tts/.venv/bin/python (jika ada)
-3. python3 dari PATH
+2. tts/.venv/bin/python (POSIX) atau tts/.venv/Scripts/python.exe (Windows)
+3. python3 dari PATH (POSIX) atau python (Windows)
 ```
 
-Script engine dicari di `tts/tts_supertonic.py` (bisa dioverride dengan
+Script setup mengikuti platform: `tts/setup.sh` dijalankan lewat `bash` di
+POSIX, `tts/setup.ps1` lewat PowerShell di Windows. Script engine dicari di
+`tts/tts_supertonic.py` (bisa dioverride dengan
 `EQURAN_TTS_SUPERTONIC`). Voice dipilih lewat `EQURAN_TTS_SUPERTONIC_VOICE`
 (default `M2`; pilihan `M1`–`M5`, `F1`–`F5`).
 
@@ -107,8 +118,10 @@ saat runtime:
 ```text
 1. EQURAN_TTS_PYTHON (jika diset)          → dipakai apa adanya
 2. <resource>/tts/.venv-gpu/bin/python     → hanya jika bisa import supertonic
+   (Windows: <resource>/tts/.venv-gpu/Scripts/python.exe)
 3. <resource>/tts/.venv/bin/python         → jika ada
-4. python3 dari PATH
+   (Windows: <resource>/tts/.venv/Scripts/python.exe)
+4. python3 dari PATH (python di Windows)
 ```
 
 Untuk mengaktifkan GPU di mesin baru:
@@ -246,10 +259,11 @@ Qari keys:
 
 ### Runtime Distribution
 
-Paket desktop menyertakan file setup ringan (`tts/setup.sh`,
-`tts/requirements.txt`, `tts/tts_supertonic.py`). Runtime Python dan model
-Supertonic tidak dibundel; keduanya disiapkan sekali lewat `tts/setup.sh`, dan
-model diunduh otomatis oleh SDK Supertonic saat sintesis pertama.
+Paket desktop menyertakan file setup ringan (`tts/setup.sh` untuk POSIX,
+`tts/setup.ps1` untuk Windows, `tts/requirements.txt`, `tts/tts_supertonic.py`).
+Runtime Python dan model Supertonic tidak dibundel; keduanya disiapkan sekali
+lewat script platform tersebut, dan model diunduh otomatis oleh SDK Supertonic
+saat sintesis pertama.
 
 Tidak ada lagi voice-pack archive, manifest, atau flow ekstraksi `tar.zst`.
 Status TTS dihitung dari ketersediaan script engine dan hasil

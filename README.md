@@ -53,7 +53,7 @@ point.
 
 | | |
 |---|---|
-| OS | Linux (RPM/DEB or source). The code targets Windows and macOS too; only Linux is packaged. |
+| OS | Linux (RPM/DEB), Windows (installer). macOS builds from source. |
 | Rust | 1.88+ (edition 2024, uses let-chains) for a source build |
 | Node | 22.18+ or 24 for the desktop frontend (Vite 8; the tests run `.ts` directly) |
 | System | `alsa-lib-devel` / `libasound2-dev` and the [Tauri Linux prerequisites](https://v2.tauri.app/start/prerequisites/) for a source build |
@@ -118,6 +118,15 @@ The same thing from a terminal, if you prefer:
 
 ```bash
 VENV_DIR="$HOME/.local/share/id.equran.desktop/tts/.venv" bash /usr/lib/eQuran/tts/setup.sh
+```
+
+On Windows the app runs the PowerShell equivalent, `tts/setup.ps1`, with the same
+`VENV_DIR` contract (the venv interpreter then lives at
+`Scripts\python.exe` inside it):
+
+```powershell
+$env:VENV_DIR = "$env:APPDATA\id.equran.desktop\tts\.venv"
+powershell -ExecutionPolicy Bypass -File "<install dir>\tts\setup.ps1"
 ```
 
 > [!NOTE]
@@ -229,6 +238,12 @@ From a checkout, the equivalent is:
 bash tts/setup.sh          # writes tts/.venv
 ```
 
+On Windows, run the PowerShell script against the same venv layout:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tts\setup.ps1   # writes tts\.venv
+```
+
 The setup script picks the newest supported Python interpreter (3.12–3.14),
 creates the venv and installs `supertonic`. The model (~400 MB) is downloaded on
 first synthesis and cached under `~/.cache/supertonic3/`. For GPU acceleration run
@@ -313,7 +328,8 @@ about those services, used for interoperability.
   synthesized voice, separate from the qari.
 * **Tafsir narration is long.** An English tafsir can run for many minutes per
   ayah; it is meant for careful listening, not background play.
-* **No iOS/Android build.** The Tauri targets exist but only Linux is packaged.
+* **No iOS/Android or macOS build.** The Tauri targets exist; Linux and Windows
+  are packaged.
 * **Content depends on third parties.** EQuran.id and UmmahAPI can change or rate
   limit; a failure surfaces as a fetch error, not a broken screen.
 * **The "Ask about this verse" assistant is deliberately not built.** The place is

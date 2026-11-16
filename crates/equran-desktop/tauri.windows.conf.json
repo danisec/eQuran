@@ -13,7 +13,8 @@
   "bundle": {
     "targets": ["nsis"],
     "resources": {
-      "../../tts/requirements.txt": "tts/requirements.txt"
+      "../../tts/requirements.txt": "tts/requirements.txt",
+      "../../tts/setup.ps1": "tts/setup.ps1"
     },
     "windows": {
       "nsis": {

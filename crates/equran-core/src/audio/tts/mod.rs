@@ -17,7 +17,7 @@ use std::time::Duration;
 
 pub use config::forget_supertonic_probes;
 pub use engine::TtsEngine;
-pub use runtime::RuntimeSetup;
+pub use runtime::{RuntimeSetup, setup_script_name};
 
 const DEFAULT_VOICE: &str = "M2";
 const CACHE_SUBDIR: &str = "tts";

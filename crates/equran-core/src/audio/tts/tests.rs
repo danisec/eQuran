@@ -3,6 +3,7 @@
 use super::config::SupertonicConfig;
 #[cfg(unix)]
 use super::config::status_from_config;
+use super::config::{system_python, venv_interpreter_relative};
 use super::text::{sanitize_for_speech, split_text_for_tts};
 use super::*;
 
@@ -14,7 +15,7 @@ fn resolves_supertonic_script_and_falls_back_to_system_python() {
         config.script,
         PathBuf::from("/tmp/equran-cli/tts/tts_supertonic.py")
     );
-    assert_eq!(config.python, PathBuf::from("python3"));
+    assert_eq!(config.python, PathBuf::from(system_python()));
 }
 
 #[test]
@@ -23,16 +24,19 @@ fn prefers_project_venv_python_when_present() {
     let missing_root = temp_dir.path().join("missing");
     let resource_root = temp_dir.path().join("resources");
     let tts_dir = resource_root.join("tts");
-    let venv_bin = tts_dir.join(".venv/bin");
-    std::fs::create_dir_all(&venv_bin).expect("venv bin should be created");
+    // The interpreter sits in bin/ on Unix and Scripts/ on Windows; the config
+    // helper is the single source of that layout, so the test follows it.
+    let venv_python = resource_root.join(venv_interpreter_relative(".venv"));
+    std::fs::create_dir_all(venv_python.parent().expect("venv directory"))
+        .expect("venv directory should be created");
     std::fs::write(tts_dir.join("tts_supertonic.py"), "").expect("script should be created");
-    std::fs::write(venv_bin.join("python"), "").expect("python should be created");
+    std::fs::write(&venv_python, "").expect("python should be created");
 
     let config =
         SupertonicConfig::from_env_or_project_roots(&[missing_root, resource_root.clone()]);
 
     assert_eq!(config.script, resource_root.join("tts/tts_supertonic.py"));
-    assert_eq!(config.python, resource_root.join("tts/.venv/bin/python"));
+    assert_eq!(config.python, venv_python);
 }
 
 // The interpreter stubs below are POSIX shell scripts, so the tests that run

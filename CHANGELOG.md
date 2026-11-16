@@ -7,6 +7,14 @@ things most worth watching.
 
 ## Unreleased
 
+### Added
+
+* Windows speech-runtime setup: the app now runs `tts/setup.ps1` through Windows
+  PowerShell (with `-ExecutionPolicy Bypass` scoped to that invocation) and
+  discovers the venv interpreter at `Scripts\python.exe`, so the translation and
+  tafsir voice can be installed on Windows instead of reporting the runtime as
+  missing. The manual setup hint in Settings is likewise PowerShell on Windows.
+
 ## 1.1.4
 
 ### Added

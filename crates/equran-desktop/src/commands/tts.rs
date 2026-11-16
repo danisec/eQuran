@@ -174,7 +174,17 @@ fn payload(
     }
 }
 
-/// The copy-pasteable equivalent of the in-app action.
+/// The copy-pasteable equivalent of the in-app action, per platform.
+#[cfg(windows)]
+fn manual_command(plan: &RuntimeSetup) -> String {
+    format!(
+        "$env:VENV_DIR={}; powershell -ExecutionPolicy Bypass -File {}",
+        powershell_quote(&plan.venv_dir().display().to_string()),
+        powershell_quote(&plan.script().display().to_string()),
+    )
+}
+
+#[cfg(not(windows))]
 fn manual_command(plan: &RuntimeSetup) -> String {
     format!(
         "VENV_DIR={} bash {}",
@@ -183,8 +193,19 @@ fn manual_command(plan: &RuntimeSetup) -> String {
     )
 }
 
+/// Quotes a path for the Windows manual-command hint.
+///
+/// PowerShell single quotes are literal, and a literal single quote inside is
+/// doubled. Paths with spaces are common under `C:\Users\...`, so the quotes
+/// are not optional.
+#[cfg(windows)]
+fn powershell_quote(value: &str) -> String {
+    format!("'{}'", value.replace('\'', "''"))
+}
+
 /// Quotes a path for the manual-command hint. Paths with spaces are common in
 /// home directories, and an unquoted one silently splits into two arguments.
+#[cfg(not(windows))]
 fn shell_quote(value: &str) -> String {
     if value
         .chars()
@@ -199,6 +220,7 @@ fn shell_quote(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use equran_core::audio::tts::setup_script_name;
     use std::path::PathBuf;
 
     fn state(resource: &str, writable: &str) -> AppState {
@@ -237,15 +259,19 @@ mod tests {
         let base = tempfile::tempdir().expect("tempdir");
         let resource = base.path().join("resource");
         std::fs::create_dir_all(resource.join("tts")).expect("dirs");
-        std::fs::write(resource.join("tts/setup.sh"), "").expect("script");
+        std::fs::write(resource.join("tts").join(setup_script_name()), "").expect("script");
         let state = AppState::new(Some(resource), Some(base.path().join("app-data")))
             .expect("AppState should initialize");
 
         let payload = payload(&state, TtsVoiceStatus::MissingRuntime, None);
 
         assert!(payload.can_setup);
-        assert!(payload.setup_command.contains("setup.sh"));
-        assert!(payload.setup_command.starts_with("VENV_DIR="));
+        assert!(payload.setup_command.contains(setup_script_name()));
+        if cfg!(windows) {
+            assert!(payload.setup_command.starts_with("$env:VENV_DIR"));
+        } else {
+            assert!(payload.setup_command.starts_with("VENV_DIR="));
+        }
     }
 
     #[test]
@@ -255,12 +281,17 @@ mod tests {
             PathBuf::from("/home/user/.local/share/id.equran.desktop/tts/.venv"),
         );
 
-        assert_eq!(
-            manual_command(&plan),
-            "VENV_DIR=/home/user/.local/share/id.equran.desktop/tts/.venv bash /usr/lib/eQuran/tts/setup.sh"
-        );
+        let command = manual_command(&plan);
+        assert!(command.contains(&plan.venv_dir().display().to_string()));
+        assert!(command.contains(&plan.script().display().to_string()));
+        if cfg!(windows) {
+            assert!(command.starts_with("$env:VENV_DIR"));
+        } else {
+            assert!(command.starts_with("VENV_DIR="));
+        }
     }
 
+    #[cfg(not(windows))]
     #[test]
     fn shell_quote_protects_paths_with_spaces() {
         assert_eq!(
@@ -270,6 +301,15 @@ mod tests {
         assert_eq!(
             shell_quote("/usr/lib/eQuran/tts/setup.sh"),
             "/usr/lib/eQuran/tts/setup.sh"
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn powershell_quote_doubles_embedded_single_quotes() {
+        assert_eq!(
+            powershell_quote(r"C:\Users\Dani O'Brien\tts\.venv"),
+            r"'C:\Users\Dani O''Brien\tts\.venv'"
         );
     }
 }
