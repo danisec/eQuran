@@ -97,7 +97,13 @@ fn shell_command(script: &Path) -> tokio::process::Command {
 
     let mut command = tokio::process::Command::new("powershell.exe");
     command
-        .args(["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File"])
+        .args([
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+        ])
         .arg(script);
     // The app is a GUI subsystem binary, so a child console process would
     // otherwise flash a terminal window during the (long) install.

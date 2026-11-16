@@ -140,11 +140,7 @@ pub(super) fn venv_interpreter_relative(venv_name: &str) -> String {
 /// Windows installs `python.exe` (and a `py` launcher) onto PATH; POSIX
 /// traditionally names the Python 3 binary `python3`.
 pub(super) fn system_python() -> &'static str {
-    if cfg!(windows) {
-        "python"
-    } else {
-        "python3"
-    }
+    if cfg!(windows) { "python" } else { "python3" }
 }
 
 /// Reads the interpreter's version as `major.minor.patch`, or `None` when it
