@@ -1,0 +1,10 @@
+# Static-link the MSVC C runtime into Windows builds so the installer is
+# self-contained. A binary built with the default dynamic CRT imports
+# VCRUNTIME140.dll / VCRUNTIME140_1.dll, which are only present once the
+# Visual C++ Redistributable is installed; a fresh Windows machine then
+# refuses to start the app with "VCRUNTIME140.dll was not found".
+#
+# This only affects the Windows MSVC target. The GNU target and all host
+# compilations (build scripts, proc macros) keep their default linking.
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]
