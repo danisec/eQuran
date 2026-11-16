@@ -15,6 +15,14 @@ things most worth watching.
   tafsir voice can be installed on Windows instead of reporting the runtime as
   missing. The manual setup hint in Settings is likewise PowerShell on Windows.
 
+### Fixed
+
+* The Windows installer no longer depends on the Visual C++ Redistributable. It
+  previously shipped a binary that imported `VCRUNTIME140.dll` and
+  `VCRUNTIME140_1.dll`, so a machine without the redist refused to launch with
+  "VCRUNTIME140.dll was not found". The MSVC target now builds with `+crt-static`,
+  embedding the runtime into the executable.
+
 ## 1.1.4
 
 ### Added
