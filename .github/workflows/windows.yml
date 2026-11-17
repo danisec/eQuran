@@ -22,6 +22,61 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # The app runs setup.ps1 through Windows PowerShell 5.1 at runtime, but the
+      # build only copies it. Parse it here so a syntax error cannot ship.
+      - name: Validate the PowerShell setup script
+        shell: powershell
+        run: |
+          $errors = $null
+          $tokens = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Join-Path $PWD 'tts/setup.ps1'), [ref]$tokens, [ref]$errors) | Out-Null
+          if ($errors.Count -gt 0) {
+            $errors | ForEach-Object { Write-Error $_.Message }
+            exit 1
+          }
+          Write-Host 'setup.ps1 parses cleanly'
+
+      # The speech runtime needs Python. Rather than require the user to install
+      # it, ship a relocatable CPython (python-build-standalone) as a resource,
+      # so "Set up voice" works on a machine with no system Python at all.
+      - name: Bundle a Python runtime
+        shell: pwsh
+        run: |
+          $url = 'https://github.com/astral-sh/python-build-standalone/releases/download/20261110/cpython-3.12.16+20261110-x86_64-pc-windows-msvc-install_only.tar.gz'
+          Invoke-WebRequest -Uri $url -OutFile python.tar.gz
+          tar -xzf python.tar.gz -C tts
+          Remove-Item python.tar.gz
+
+          # Strip what the runtime never needs (debug symbols dominate the size)
+          # so the installer stays reasonable. pip, venv and ensurepip stay.
+          $py = 'tts/python'
+          Get-ChildItem -Path $py -Recurse -Include *.pdb | Remove-Item -Force
+          foreach ($dir in 'include', 'libs', 'tcl', 'Lib/idlelib', 'Lib/tkinter',
+                            'Lib/lib2to3', 'Lib/turtledemo', 'Lib/pydoc_data', 'Lib/test') {
+            $path = Join-Path $py $dir
+            if (Test-Path $path) { Remove-Item -Recurse -Force $path }
+          }
+          foreach ($file in 'DLLs/tk86t.dll', 'DLLs/tcl86t.dll', 'DLLs/_tkinter.pyd') {
+            $path = Join-Path $py $file
+            if (Test-Path $path) { Remove-Item -Force $path }
+          }
+
+      # Prove the bundled interpreter runs and can create a venv, which is what
+      # setup.ps1 does at runtime. A build that merely copies the files could
+      # still ship a runtime that cannot bootstrap pip.
+      - name: Verify the bundled Python
+        shell: pwsh
+        run: |
+          & tts/python/python.exe -c "import sys, venv, ensurepip; print('python', sys.version)"
+          if ($LASTEXITCODE -ne 0) { throw 'The bundled Python cannot import venv/ensurepip' }
+
+          $venv = Join-Path $env:RUNNER_TEMP 'equran-venv-check'
+          & tts/python/python.exe -m venv $venv
+          if ($LASTEXITCODE -ne 0) { throw 'The bundled Python cannot create a venv' }
+          & (Join-Path $venv 'Scripts/python.exe') -m pip --version
+          if ($LASTEXITCODE -ne 0) { throw 'The venv has no usable pip' }
+
       - uses: actions/setup-node@v4
         with:
           node-version: 24

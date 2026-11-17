@@ -14,6 +14,11 @@ things most worth watching.
   discovers the venv interpreter at `Scripts\python.exe`, so the translation and
   tafsir voice can be installed on Windows instead of reporting the runtime as
   missing. The manual setup hint in Settings is likewise PowerShell on Windows.
+* The Windows installer now bundles a relocatable CPython under `tts/python/`,
+  so **Set up voice** works on a machine with no system Python (no more
+  `VCRUNTIME140.dll`/`python was not found` dead end). The app prefers the
+  bundled interpreter when no venv exists yet, and `setup.ps1` no longer mistakes
+  the Microsoft Store `python` alias for a real interpreter.
 
 ### Fixed
 

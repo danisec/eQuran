@@ -3,7 +3,7 @@
 use super::config::SupertonicConfig;
 #[cfg(unix)]
 use super::config::status_from_config;
-use super::config::{system_python, venv_interpreter_relative};
+use super::config::{bundled_python_relative, system_python, venv_interpreter_relative};
 use super::text::{sanitize_for_speech, split_text_for_tts};
 use super::*;
 
@@ -37,6 +37,48 @@ fn prefers_project_venv_python_when_present() {
 
     assert_eq!(config.script, resource_root.join("tts/tts_supertonic.py"));
     assert_eq!(config.python, venv_python);
+}
+
+#[test]
+fn prefers_the_bundled_python_when_no_venv_exists() {
+    let temp_dir = tempfile::tempdir().expect("temp dir should be created");
+    let resource_root = temp_dir.path();
+    let tts_dir = resource_root.join("tts");
+    let bundled = resource_root.join(bundled_python_relative());
+    std::fs::create_dir_all(bundled.parent().expect("python directory"))
+        .expect("python dir should be created");
+    std::fs::write(tts_dir.join("tts_supertonic.py"), "").expect("script should be created");
+    std::fs::write(&bundled, "").expect("python should be created");
+
+    let config = SupertonicConfig::from_env_or_project_roots(&[resource_root.to_path_buf()]);
+
+    // The bundled runtime is preferred over a system interpreter; an empty file
+    // is fine here because resolution only checks that the path exists.
+    assert_eq!(config.python, bundled);
+    assert!(config.uses_bundled_python);
+    assert!(!config.uses_project_venv);
+}
+
+#[test]
+fn a_finished_venv_beats_the_bundled_python() {
+    let temp_dir = tempfile::tempdir().expect("temp dir should be created");
+    let resource_root = temp_dir.path();
+    let tts_dir = resource_root.join("tts");
+    let bundled = resource_root.join(bundled_python_relative());
+    std::fs::create_dir_all(bundled.parent().expect("python directory"))
+        .expect("python dir should be created");
+    std::fs::write(&bundled, "").expect("python should be created");
+    let venv_python = resource_root.join(venv_interpreter_relative(".venv"));
+    std::fs::create_dir_all(venv_python.parent().expect("venv directory"))
+        .expect("venv directory should be created");
+    std::fs::write(tts_dir.join("tts_supertonic.py"), "").expect("script should be created");
+    std::fs::write(&venv_python, "").expect("python should be created");
+
+    let config = SupertonicConfig::from_env_or_project_roots(&[resource_root.to_path_buf()]);
+
+    assert_eq!(config.python, venv_python);
+    assert!(!config.uses_bundled_python);
+    assert!(config.uses_project_venv);
 }
 
 // The interpreter stubs below are POSIX shell scripts, so the tests that run
@@ -94,6 +136,7 @@ fn reports_missing_runtime_when_python_cannot_import_supertonic() {
         gpu_python: None,
         script,
         uses_project_venv: false,
+        uses_bundled_python: false,
         voice: DEFAULT_VOICE.to_owned(),
         total_steps: DEFAULT_TOTAL_STEPS,
         device: DEFAULT_DEVICE.to_owned(),
@@ -120,6 +163,7 @@ fn reports_ready_when_python_imports_supertonic() {
         gpu_python: None,
         script,
         uses_project_venv: false,
+        uses_bundled_python: false,
         voice: DEFAULT_VOICE.to_owned(),
         total_steps: DEFAULT_TOTAL_STEPS,
         device: DEFAULT_DEVICE.to_owned(),

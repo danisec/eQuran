@@ -4,6 +4,7 @@
 /frontend/build/
 /frontend/dist/
 /tts/.venv/
+/tts/python/
 /.omo/
 __pycache__/
 *.pyc

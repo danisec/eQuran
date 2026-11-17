@@ -15,6 +15,9 @@ pub(super) struct SupertonicConfig {
     pub(super) script: PathBuf,
     /// True when `python` is a project venv rather than a system interpreter.
     pub(super) uses_project_venv: bool,
+    /// True when `python` is the interpreter bundled with the installer (Windows
+    /// ships one so the voice can be set up without a system Python).
+    pub(super) uses_bundled_python: bool,
     pub(super) voice: String,
     pub(super) total_steps: u32,
     pub(super) device: String,
@@ -29,15 +32,22 @@ impl SupertonicConfig {
 
         let venv_python = first_project_file(project_roots, &venv_interpreter_relative(".venv"));
         let uses_project_venv = venv_python.is_file();
-        let python = std::env::var_os("EQURAN_TTS_PYTHON")
-            .map(PathBuf::from)
-            .unwrap_or_else(|| {
-                if uses_project_venv {
-                    venv_python
-                } else {
-                    PathBuf::from(system_python())
-                }
-            });
+
+        // The Windows installer ships a relocatable CPython under `tts/python/`
+        // so the voice can be prepared without a system interpreter. Prefer a
+        // finished venv, then the bundled runtime, then the system Python.
+        let bundled_python = first_project_file(project_roots, bundled_python_relative());
+        let bundled_python = bundled_python.is_file().then_some(bundled_python);
+
+        let explicit_python = std::env::var_os("EQURAN_TTS_PYTHON").map(PathBuf::from);
+        let (python, uses_bundled_python) = match explicit_python {
+            Some(explicit) => (explicit, false),
+            None if uses_project_venv => (venv_python, false),
+            None => match bundled_python {
+                Some(bundled) => (bundled, true),
+                None => (PathBuf::from(system_python()), false),
+            },
+        };
 
         // A GPU-capable ONNX Runtime wheel can be installed into a side venv
         // without touching the system interpreter. Prefer it when present.
@@ -71,6 +81,7 @@ impl SupertonicConfig {
             gpu_python,
             script,
             uses_project_venv,
+            uses_bundled_python,
             voice,
             total_steps,
             device,
@@ -141,6 +152,18 @@ pub(super) fn venv_interpreter_relative(venv_name: &str) -> String {
 /// traditionally names the Python 3 binary `python3`.
 pub(super) fn system_python() -> &'static str {
     if cfg!(windows) { "python" } else { "python3" }
+}
+
+/// The relocatable CPython the Windows installer ships under `tts/python/`.
+///
+/// Only Windows bundles one (see `.github/workflows/windows.yml`); other
+/// platforms rely on a system interpreter, so the path simply never exists.
+pub(super) fn bundled_python_relative() -> &'static str {
+    if cfg!(windows) {
+        "tts/python/python.exe"
+    } else {
+        "tts/python/bin/python3"
+    }
 }
 
 /// Reads the interpreter's version as `major.minor.patch`, or `None` when it

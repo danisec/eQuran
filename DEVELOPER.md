@@ -81,7 +81,9 @@ Aplikasi mencari interpreter dan script dengan urutan:
 ```text
 1. EQURAN_TTS_PYTHON (jika diset)
 2. tts/.venv/bin/python (POSIX) atau tts/.venv/Scripts/python.exe (Windows)
-3. python3 dari PATH (POSIX) atau python (Windows)
+3. tts/python/bin/python3 (POSIX) atau tts/python/python.exe (Windows) — interpreter
+   yang dibundel installer Windows
+4. python3 dari PATH (POSIX) atau python (Windows)
 ```
 
 Script setup mengikuti platform: `tts/setup.sh` dijalankan lewat `bash` di
@@ -261,7 +263,9 @@ Qari keys:
 
 Paket desktop menyertakan file setup ringan (`tts/setup.sh` untuk POSIX,
 `tts/setup.ps1` untuk Windows, `tts/requirements.txt`, `tts/tts_supertonic.py`).
-Runtime Python dan model Supertonic tidak dibundel; keduanya disiapkan sekali
+Installer Windows juga membundel CPython portabel di `tts/python/` (diunduh dari
+python-build-standalone saat CI, tidak dikomit) sehingga "Set up voice" jalan
+tanpa Python sistem. Runtime Python dan model Supertonic tidak dibundel; keduanya disiapkan sekali
 lewat script platform tersebut, dan model diunduh otomatis oleh SDK Supertonic
 saat sintesis pertama.
 

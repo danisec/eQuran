@@ -57,7 +57,7 @@ point.
 | Rust | 1.88+ (edition 2024, uses let-chains) for a source build |
 | Node | 22.18+ or 24 for the desktop frontend (Vite 8; the tests run `.ts` directly) |
 | System | `alsa-lib-devel` / `libasound2-dev` and the [Tauri Linux prerequisites](https://v2.tauri.app/start/prerequisites/) for a source build |
-| Python | 3.12–3.14, with `pip`, for the speech runtime (the app runs without it, qari only) |
+| Python | 3.12–3.14 with `pip` for the speech runtime; the Windows installer bundles its own. The app runs without it (qari only). |
 | Disk | ~400 MB for the speech model, downloaded on first synthesis, plus the caches below |
 
 Reading and recitation need nothing but the app. The speech runtime is optional
@@ -245,7 +245,9 @@ powershell -ExecutionPolicy Bypass -File tts\setup.ps1   # writes tts\.venv
 ```
 
 The setup script picks the newest supported Python interpreter (3.12–3.14),
-creates the venv and installs `supertonic`. The model (~400 MB) is downloaded on
+creates the venv and installs `supertonic`. The Windows installer ships a
+relocatable CPython of its own, so its **Set up voice** works on a machine with
+no system Python. The model (~400 MB) is downloaded on
 first synthesis and cached under `~/.cache/supertonic3/`. For GPU acceleration run
 `bash tts/setup-gpu.sh` instead; it detects CUDA, ROCm, DirectML or CoreML and
 falls back to CPU.
@@ -314,6 +316,7 @@ about those services, used for interoperability.
 |---|---|---|
 | Translation voice never speaks; Settings shows a notice | Speech runtime missing | Press **Set up voice** in Settings, or run the command shown there |
 | Notice names a Python or interpreter error | `python3` is newer than the ONNX wheels support | Let `setup.sh` pick 3.12–3.14, or set `EQURAN_TTS_PYTHON` |
+| On Windows, setup says Python was not found | The Microsoft Store alias is selected instead of a real Python | Disable the `python`/`python3` app execution aliases, install Python 3.12–3.14 from python.org, then press **Set up voice** again |
 | Narration is slow | No GPU build of ONNX Runtime | `bash tts/setup-gpu.sh`, or lower `EQURAN_TTS_SUPERTONIC_STEPS` |
 | Qari audio does not play on a source build | Built without the audio feature | `cargo build --release --features audio` |
 | Clear cache does nothing and says to stop playback | Audio session active | Stop playback, then clear |

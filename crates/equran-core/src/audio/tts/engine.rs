@@ -83,6 +83,15 @@ impl TtsEngine {
 
         let python = config.synthesis_python();
         let name = python.display();
+
+        // A bundled interpreter means the app carries its own Python; nothing
+        // needs installing from python.org. The runtime just has not been set
+        // up yet, which the Set up voice button handles.
+        if config.uses_bundled_python {
+            return "The speech runtime is not set up yet. Press Set up voice to install it."
+                .to_owned();
+        }
+
         match interpreter_version(python) {
             // A fallback interpreter means no runtime was ever set up; the app
             // borrowed the system Python and found no `supertonic` there.
@@ -92,9 +101,19 @@ impl TtsEngine {
             Some(version) => format!(
                 "The speech runtime at {name} (Python {version}) could not load supertonic. onnxruntime ships wheels for Python 3.12–3.14, so this runtime may need rebuilding."
             ),
-            None => format!(
-                "The Python interpreter {name} could not be run. Python 3.12–3.14 is required to build the speech runtime."
-            ),
+            None => {
+                // On Windows this is almost always the Microsoft Store's
+                // "python" app execution alias: it exists on every machine but
+                // only opens the Store, so the interpreter cannot answer.
+                let store_hint = if cfg!(windows) {
+                    " If typing \"python\" opens the Microsoft Store, disable that app execution alias in Settings > Apps > Advanced app settings > App execution aliases, or install Python from python.org."
+                } else {
+                    ""
+                };
+                format!(
+                    "The Python interpreter {name} could not be run. Python 3.12–3.14 is required to build the speech runtime.{store_hint}"
+                )
+            }
         }
     }
 
